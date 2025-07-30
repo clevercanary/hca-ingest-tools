@@ -8,6 +8,8 @@ import pytest
 
 from hca_ingest.smart_sync.checksum import ChecksumCalculator
 from hca_ingest.smart_sync.manifest import ManifestGenerator
+from hca_ingest.smart_sync.sync_engine import SmartSync
+from hca_ingest.config import Config
 
 
 class TestChecksumCalculator:
@@ -298,3 +300,54 @@ class TestManifestGenerator:
         finally:
             if temp_path.exists():
                 temp_path.unlink()
+
+
+class TestSyncEngine:
+    """Test sync engine functionality."""
+    
+    def test_upload_alphabetical_order(self, tmp_path):
+        """Test that files are uploaded in alphabetical order."""
+        from unittest.mock import Mock, patch
+        
+        # Create test files with non-alphabetical creation order
+        files = ["zebra.h5ad", "alpha.h5ad", "beta.h5ad"]
+        for filename in files:
+            test_file = tmp_path / filename
+            test_file.write_text("test content")
+        
+        # Mock config with proper structure
+        config = Mock(spec=Config)
+        config.aws = Mock()
+        config.aws.profile = None
+        
+        # Create sync engine
+        sync_engine = SmartSync(config)
+        
+        # Mock files_to_upload (simulating what would come from comparison)
+        files_to_upload = [
+            {"filename": "zebra.h5ad", "local_path": tmp_path / "zebra.h5ad", "checksum": "hash1"},
+            {"filename": "alpha.h5ad", "local_path": tmp_path / "alpha.h5ad", "checksum": "hash2"},
+            {"filename": "beta.h5ad", "local_path": tmp_path / "beta.h5ad", "checksum": "hash3"},
+        ]
+        
+        upload_order = []
+        
+        def mock_subprocess_run(cmd, check=True):
+            # Extract filename from the s3 cp command
+            # Command structure: ["aws", "s3", "cp", local_path, s3_path, ...]
+            local_path = cmd[3]  # aws s3 cp <local_path> <s3_path>
+            filename = Path(local_path).name
+            upload_order.append(filename)
+            return Mock()
+        
+        # Mock subprocess.run to capture upload order
+        with patch('hca_ingest.smart_sync.sync_engine.subprocess.run', side_effect=mock_subprocess_run):
+            with patch.object(sync_engine, '_parse_s3_path', return_value=("bucket", "prefix/")):
+                result = sync_engine._upload_files(files_to_upload, "s3://bucket/prefix/")
+        
+        # Verify files were uploaded in alphabetical order
+        expected_order = ["alpha.h5ad", "beta.h5ad", "zebra.h5ad"]
+        assert upload_order == expected_order, f"Expected {expected_order}, got {upload_order}"
+        
+        # Verify all files were processed
+        assert len(result) == 3

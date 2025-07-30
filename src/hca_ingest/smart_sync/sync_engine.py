@@ -231,7 +231,10 @@ class SmartSync:
         uploaded_files = []
         bucket, prefix = self._parse_s3_path(s3_path)
         
-        for file_info in files_to_upload:
+        # Sort files by filename for consistent upload order (matches display order)
+        sorted_files = sorted(files_to_upload, key=lambda x: x['filename'])
+        
+        for file_info in sorted_files:
             self.console.print()  # Add spacing before each upload
             try:
                 s3_key = f"{prefix.rstrip('/')}/{file_info['filename']}"

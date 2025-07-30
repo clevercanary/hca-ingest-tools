@@ -3,7 +3,7 @@
 import json
 import tempfile
 from pathlib import Path
-
+import hashlib
 import pytest
 
 from hca_ingest.smart_sync.checksum import ChecksumCalculator
@@ -17,29 +17,178 @@ class TestChecksumCalculator:
         """Set up test fixtures."""
         self.calculator = ChecksumCalculator()
     
-    def test_sha256_calculation(self):
-        """Test SHA256 calculation for a test file."""
-        # Create a temporary file with known content
-        test_content = b"Hello, HCA World!"
-        expected_sha256 = "8c8c4e3c4d5c6b7a9e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4"
+    def test_sha256_known_answer(self):
+        """Test SHA256 calculation against known answer from fixture file."""
+        # Create fixture file with known content
+        fixture_content = b"Hello, HCA World! This is a test file for checksum validation."
+        # This SHA256 was calculated with our helper script and verified
+        expected_sha256 = "5829c2cba87286e32a50f6a136c00eec2970c4b881f52875809622edc6a221a5"
         
-        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-            temp_file.write(test_content)
-            temp_file.flush()
+        # Create fixture directory if it doesn't exist
+        fixture_dir = Path(__file__).parent / "fixtures"
+        fixture_dir.mkdir(exist_ok=True)
+        
+        fixture_path = fixture_dir / "small.txt"
+        
+        # Write fixture file
+        with open(fixture_path, 'wb') as f:
+            f.write(fixture_content)
+        
+        try:
+            # Calculate checksum using our implementation
+            actual_sha256 = self.calculator.calculate_sha256(fixture_path)
             
-            temp_path = Path(temp_file.name)
+            # Verify against known answer
+            assert actual_sha256 == expected_sha256, f"Expected {expected_sha256}, got {actual_sha256}"
+            
+            # Verify it's a valid SHA256 format
+            assert len(actual_sha256) == 64
+            assert all(c in '0123456789abcdef' for c in actual_sha256.lower())
+            
+        finally:
+            # Clean up fixture file
+            if fixture_path.exists():
+                fixture_path.unlink()
+
+    def test_sha256_large_file_multi_chunk(self):
+        """Test SHA256 calculation for file larger than chunk size (8192 bytes)."""
+        # Create content larger than default chunk size (8192 bytes)
+        # Use deterministic content so we can verify the hash
+        chunk_size = 8192
+        large_content = b"A" * (chunk_size * 2 + 100)  # 16484 bytes (2+ chunks)
+        
+        # Calculate expected hash using Python's hashlib directly
+        expected_sha256 = hashlib.sha256(large_content).hexdigest()
+        
+        # Create fixture directory if it doesn't exist
+        fixture_dir = Path(__file__).parent / "fixtures"
+        fixture_dir.mkdir(exist_ok=True)
+        
+        fixture_path = fixture_dir / "large.txt"
+        
+        # Write large fixture file
+        with open(fixture_path, 'wb') as f:
+            f.write(large_content)
+        
+        try:
+            # Calculate checksum using our chunked implementation
+            actual_sha256 = self.calculator.calculate_sha256(fixture_path)
+            
+            # Verify our chunked reading produces same result as direct calculation
+            assert actual_sha256 == expected_sha256, f"Expected {expected_sha256}, got {actual_sha256}"
+            
+            # Verify it's a valid SHA256 format
+            assert len(actual_sha256) == 64
+            assert all(c in '0123456789abcdef' for c in actual_sha256.lower())
+            
+            print(f" Large file test passed: {len(large_content)} bytes, hash: {actual_sha256[:16]}...")
+            
+        finally:
+            # Clean up fixture file
+            if fixture_path.exists():
+                fixture_path.unlink()
+
+    def test_sha256_chunk_boundaries(self):
+        """Test SHA256 calculation for files at chunk boundaries (edge cases)."""
+        chunk_size = 8192  # Default chunk size from ChecksumCalculator
+        
+        # Test cases: exactly chunk size, chunk + 1, chunk - 1
+        test_cases = [
+            ("exactly_chunk", chunk_size),      # 8192 bytes - exactly one chunk
+            ("chunk_plus_one", chunk_size + 1), # 8193 bytes - chunk + 1 byte
+            ("chunk_minus_one", chunk_size - 1), # 8191 bytes - chunk - 1 byte
+        ]
+        
+        fixture_dir = Path(__file__).parent / "fixtures"
+        fixture_dir.mkdir(exist_ok=True)
+        
+        for test_name, file_size in test_cases:
+            # Create deterministic content of exact size
+            boundary_content = b"B" * file_size
+            
+            # Calculate expected hash using Python's hashlib directly
+            expected_sha256 = hashlib.sha256(boundary_content).hexdigest()
+            
+            fixture_path = fixture_dir / f"{test_name}.txt"
+            
+            # Write boundary test file
+            with open(fixture_path, 'wb') as f:
+                f.write(boundary_content)
             
             try:
-                # Calculate actual checksum
-                actual_sha256 = self.calculator.calculate_sha256(temp_path)
+                # Calculate checksum using our chunked implementation
+                actual_sha256 = self.calculator.calculate_sha256(fixture_path)
                 
-                # Verify it's a valid SHA256 (64 hex characters)
+                # Verify our chunked reading produces same result as direct calculation
+                assert actual_sha256 == expected_sha256, f"{test_name}: Expected {expected_sha256}, got {actual_sha256}"
+                
+                # Verify it's a valid SHA256 format
                 assert len(actual_sha256) == 64
                 assert all(c in '0123456789abcdef' for c in actual_sha256.lower())
                 
+                print(f"✅ Boundary test passed: {test_name} ({file_size} bytes), hash: {actual_sha256[:16]}...")
+                
             finally:
-                temp_path.unlink()  # Clean up
-    
+                # Clean up fixture file
+                if fixture_path.exists():
+                    fixture_path.unlink()
+
+    def test_sha256_cross_validation_with_shasum(self):
+        """Test SHA256 calculation against external shasum command-line tool."""
+        import subprocess
+        import shutil
+        
+        # Check if shasum is available (should be on macOS/Linux)
+        if not shutil.which('shasum'):
+            pytest.skip("shasum command not available on this system")
+        
+        # Create test content for cross-validation
+        cross_val_content = b"Cross-validation test content for biological data integrity verification."
+        
+        fixture_dir = Path(__file__).parent / "fixtures"
+        fixture_dir.mkdir(exist_ok=True)
+        
+        fixture_path = fixture_dir / "cross_validation.txt"
+        
+        # Write test file
+        with open(fixture_path, 'wb') as f:
+            f.write(cross_val_content)
+        
+        try:
+            # Calculate checksum using our implementation
+            our_sha256 = self.calculator.calculate_sha256(fixture_path)
+            
+            # Calculate checksum using external shasum tool
+            result = subprocess.run(
+                ['shasum', '-a', '256', str(fixture_path)],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            # Parse shasum output (format: "hash  filename")
+            shasum_output = result.stdout.strip()
+            external_sha256 = shasum_output.split()[0]
+            
+            # Verify our implementation matches external tool
+            assert our_sha256 == external_sha256, f"Our implementation: {our_sha256}, shasum: {external_sha256}"
+            
+            # Verify it's a valid SHA256 format
+            assert len(our_sha256) == 64
+            assert all(c in '0123456789abcdef' for c in our_sha256.lower())
+            
+            print(f"✅ Cross-validation passed: Our hash matches shasum")
+            print(f"   Content: {len(cross_val_content)} bytes")
+            print(f"   Hash: {our_sha256[:16]}...")
+            print(f"   External tool confirmed: ✓")
+            
+        except subprocess.CalledProcessError as e:
+            pytest.fail(f"shasum command failed: {e}")
+        finally:
+            # Clean up fixture file
+            if fixture_path.exists():
+                fixture_path.unlink()
+
     def test_checksum_verification(self):
         """Test checksum verification functionality."""
         test_content = b"Test content for verification"

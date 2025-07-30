@@ -16,6 +16,109 @@ from hca_ingest.smart_sync.sync_engine import SmartSync
 app = typer.Typer()
 console = Console()
 
+# Color constants for consistent styling
+class Colors:
+    RED = "[red]"
+    GREEN = "[green]"
+    RESET = "[/red]"
+    GREEN_RESET = "[/green]"
+
+# Message templates for consistent formatting
+class Messages:
+    # Error messages
+    CONFIG_LOAD_ERROR = "Error loading configuration: {error}"
+    CONFIG_INIT_ERROR = "Failed to initialize configuration: {error}"
+    CONFIG_SHOW_ERROR = "Failed to load configuration: {error}"
+    SYNC_ERROR = "Sync failed: {error}"
+    BUCKET_NOT_CONFIGURED = "Error: S3 bucket not configured. Provide bucket argument or set in config"
+    
+    # Success messages
+    CONFIG_INITIALIZING = "Initializing HCA Smart Sync Configuration"
+    CONFIG_INITIALIZED = "Configuration initialized successfully"
+    
+    # Result states
+    DRY_RUN_COMPLETED = "Dry run completed"
+    SYNC_CANCELLED = "Sync canceled by user"
+    SYNC_COMPLETED = "Sync completed successfully"
+
+# Result message lookup table
+RESULT_MESSAGES = {
+    "dry_run": {
+        "action": "Would upload",
+        "status": Messages.DRY_RUN_COMPLETED,
+        "show_file_count": False
+    },
+    "cancelled": {
+        "action": "Uploaded",
+        "status": Messages.SYNC_CANCELLED,
+        "show_file_count": True
+    },
+    "completed": {
+        "action": "Uploaded",
+        "status": Messages.SYNC_COMPLETED, 
+        "show_file_count": True
+    }
+}
+
+# Common message helpers
+def error_msg(message: str) -> str:
+    """Format error message with consistent styling."""
+    return f"{Colors.RED}{message}{Colors.RESET}"
+
+def success_msg(message: str) -> str:
+    """Format success message with consistent styling."""
+    return f"{Colors.GREEN}{message}{Colors.GREEN_RESET}"
+
+# Common formatting helpers
+def format_file_count(file_count: int, action: str) -> str:
+    """Format file count message with consistent styling."""
+    return f"\n{action} {file_count} file(s)"
+
+def format_status(status: str) -> str:
+    """Format status message with consistent styling."""
+    return f"[green]{status}[/green]"
+
+# Configuration helpers
+def _load_and_configure(profile: Optional[str], bucket: Optional[str]) -> Config:
+    """Load configuration and apply overrides."""
+    try:
+        config = Config()
+        if profile:
+            config.aws.profile = profile
+        if bucket:
+            config.s3.bucket_name = bucket
+        return config
+    except Exception as e:
+        console.print(error_msg(Messages.CONFIG_LOAD_ERROR.format(error=e)))
+        raise typer.Exit(1)
+
+def _validate_configuration(config: Config) -> None:
+    """Validate required configuration settings."""
+    if not config.s3.bucket_name:
+        console.print(error_msg(Messages.BUCKET_NOT_CONFIGURED))
+        raise typer.Exit(1)
+
+def _build_s3_path(bucket_name: str, atlas: str, folder: str) -> str:
+    """Build S3 path from components."""
+    bionetwork = atlas.split('-')[0]
+    return f"s3://{bucket_name}/{bionetwork}/{atlas}/{folder}/"
+
+def _resolve_local_path(local_path: Optional[str]) -> Path:
+    """Resolve local directory to scan."""
+    if local_path:
+        return Path(local_path).resolve()
+    else:
+        return Path.cwd()
+
+def _initialize_sync_engine(config: Config, profile: Optional[str]) -> SmartSync:
+    """Initialize sync engine with configuration."""
+    sync_engine = SmartSync(config)
+    
+    # Reset AWS clients if profile was overridden to ensure new profile is used
+    if profile:
+        sync_engine._reset_aws_clients()
+    
+    return sync_engine
 
 @app.command()
 def sync(
@@ -30,41 +133,17 @@ def sync(
 ) -> None:
     """Sync .h5ad files from local directory to S3."""
     
-    # Load configuration
+    # Load and validate configuration
+    config = _load_and_configure(profile, bucket)
+    _validate_configuration(config)
+    
+    # Build paths
+    s3_path = _build_s3_path(config.s3.bucket_name, atlas, folder)
+    current_dir = _resolve_local_path(local_path)
+    
+    # Initialize sync engine and perform sync
     try:
-        config = Config()
-        if profile:
-            config.aws.profile = profile
-        if bucket:
-            config.s3.bucket_name = bucket
-    except Exception as e:
-        console.print(f"[red]Error loading configuration: {e}[/red]")
-        raise typer.Exit(1)
-    
-    # Validate required configuration
-    if not config.s3.bucket_name:
-        console.print("[red]Error: S3 bucket not configured. Provide bucket argument or set in config[/red]")
-        raise typer.Exit(1)
-    
-    # Build S3 path
-    bionetwork = atlas.split('-')[0]
-    s3_path = f"s3://{config.s3.bucket_name}/{bionetwork}/{atlas}/{folder}/"
-    
-    # Determine local directory to scan
-    if local_path:
-        # Use provided local path
-        current_dir = Path(local_path).resolve()
-    else:
-        # Use current working directory
-        current_dir = Path.cwd()
-    
-    # Initialize sync engine
-    try:
-        sync_engine = SmartSync(config)
-        
-        # Reset AWS clients if profile was overridden to ensure new profile is used
-        if profile:
-            sync_engine._reset_aws_clients()
+        sync_engine = _initialize_sync_engine(config, profile)
         
         # Perform sync
         result = sync_engine.sync(
@@ -79,7 +158,7 @@ def sync(
         _display_results(result, dry_run)
         
     except Exception as e:
-        console.print(f"[red]Sync failed: {e}[/red]")
+        console.print(error_msg(Messages.SYNC_ERROR.format(error=e)))
         if verbose:
             console.print_exception()
         raise typer.Exit(1)
@@ -88,14 +167,14 @@ def sync(
 @app.command()
 def init() -> None:
     """Initialize configuration for HCA Smart Sync."""
-    console.print("Initializing HCA Smart Sync Configuration")
+    console.print(success_msg(Messages.CONFIG_INITIALIZING))
     
     try:
         config = Config()
-        console.print("[green]Configuration initialized successfully[/green]")
+        console.print(success_msg(Messages.CONFIG_INITIALIZED))
         _display_config(config)
     except Exception as e:
-        console.print(f"[red]Failed to initialize configuration: {e}[/red]")
+        console.print(error_msg(Messages.CONFIG_INIT_ERROR.format(error=e)))
         raise typer.Exit(1)
 
 
@@ -106,7 +185,7 @@ def config_show() -> None:
         config = Config()
         _display_config(config)
     except Exception as e:
-        console.print(f"[red]Failed to load configuration: {e}[/red]")
+        console.print(error_msg(Messages.CONFIG_SHOW_ERROR.format(error=e)))
         raise typer.Exit(1)
 
 
@@ -140,21 +219,26 @@ def _display_config(
 
 def _display_results(result: dict, dry_run: bool) -> None:
     """Display sync results."""
-    action = "Would upload" if dry_run else "Uploaded"
     file_count = result.get('files_uploaded', 0)
     cancelled = result.get('cancelled', False)
     
+    # Determine result state and get appropriate messages
     if dry_run:
-        console.print("\n[green]Dry run completed[/green]")
-        console.print()
+        state = "dry_run"
     elif cancelled:
-        console.print("\n" + action + " " + str(file_count) + " file(s)", highlight=False)
-        console.print("[green]Sync canceled by user[/green]")
-        console.print()
+        state = "cancelled"
     else:
-        console.print("\n" + action + " " + str(file_count) + " file(s)", highlight=False)
-        console.print("[green]Sync completed successfully[/green]")
-        console.print()
+        state = "completed"
+    
+    msg = RESULT_MESSAGES[state]
+    
+    # Display file count if needed (consistent f-string formatting)
+    if msg["show_file_count"]:
+        console.print(format_file_count(file_count, msg["action"]))
+    
+    # Display status message (always green for success states)
+    console.print(format_status(msg["status"]))
+    console.print()  # Add spacing after results
 
 
 def main() -> None:

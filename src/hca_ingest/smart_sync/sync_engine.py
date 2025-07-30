@@ -63,53 +63,72 @@ class SmartSync:
         Returns:
             Dictionary with sync results
         """
+        # Display banner
+        self.console.print("\n[bold blue]" + "="*60 + "[/bold blue]")
+        self.console.print("[bold blue]║" + "HCA Smart-Sync Tool".center(58) + "║[/bold blue]")
+        self.console.print("[bold blue]" + "="*60 + "[/bold blue]")
+        self.console.print()
+        self.console.print(f"[bright_black]Local Path: {local_path}[/bright_black]")
+        self.console.print(f"[bright_black]S3 Target: {s3_path}[/bright_black]")
+        if dry_run:
+            self.console.print()
+            self.console.print("[bold]DRY RUN MODE - No files will be uploaded[/bold]")
+        self.console.print()
+        
+        self.console.print("[bold blue]Step 1: Validating S3 access...[/bold blue]")
+        
         # Step 0: Validate S3 access before proceeding
         if not self._validate_s3_access(s3_path):
-            self.console.print("[red]❌ S3 access validation failed. Cannot proceed with sync.[/red]")
-            self.console.print("[yellow]💡 Try using the correct AWS profile with --profile option[/yellow]")
+            self.console.print("[red]S3 access validation failed. Cannot proceed with sync.[/red]")
+            self.console.print("[yellow]Try using the correct AWS profile with --profile option[/yellow]")
             return {"files_uploaded": 0, "manifest_path": None, "error": "access_denied"}
         
-        self.console.print(f"\n[bold blue]🔍 Scanning for .h5ad files in {local_path}[/bold blue]")
+        self.console.print("[bold blue]Step 2: Scanning local file system for .h5ad files...[/bold blue]")
         
         # Step 1: Scan for .h5ad files in current directory
         local_files = self._scan_local_files(local_path)
         
         if not local_files:
-            self.console.print("[yellow]No .h5ad files found in current directory[/yellow]")
+            self.console.print("[yellow]No .h5ad files found in directory[/yellow]")
             return {"files_uploaded": 0, "manifest_path": None}
         
-        self.console.print(f"[green]Found {len(local_files)} .h5ad files[/green]")
+        self.console.print("[bold blue]Step 3: Comparing with S3 (using SHA256 checksums)...[/bold blue]")
         
         # Step 2: Compare with S3 to determine what needs uploading
         files_to_upload = self._compare_with_s3(local_files, s3_path, force)
         
         if not files_to_upload:
-            self.console.print("[green]✓ All files are up to date[/green]")
+            self.console.print("Found " + str(len(local_files)) + " .h5ad files - all up to date")
             return {"files_uploaded": 0, "manifest_path": None}
+        
+        self.console.print("[bold blue]Step 4: Creating upload plan...[/bold blue]")
         
         # Step 3: Display upload plan
         self._display_upload_plan(files_to_upload, s3_path, dry_run)
         
-        # Step 4: Get user confirmation (unless dry run or force)
+        # Step 4.5: Get user confirmation (unless dry run or force)
         if not dry_run and not force:
-            if not Confirm.ask("❓ Proceed with upload?"):
-                self.console.print("[yellow]Upload cancelled by user[/yellow]")
-                return {"files_uploaded": 0, "manifest_path": None}
+            if not Confirm.ask("\nProceed with upload?"):
+                return {"files_uploaded": 0, "manifest_path": None, "cancelled": True}
+            self.console.print()  # Add blank line after confirmation
         
         # Step 4.5: Generate and save manifest locally first (before uploads)
         manifest_path = None
         if not dry_run:
+            self.console.print("[bold blue]Step 5: Generating and saving manifest locally...[/bold blue]")
             manifest_path = self._generate_and_save_manifest_locally(files_to_upload, s3_path, local_path)
         
         # Step 5: Upload files using AWS CLI
         uploaded_files = []
         if not dry_run:
+            self.console.print("[bold blue]Step 6: Uploading files...[/bold blue]")
             uploaded_files = self._upload_files(files_to_upload, s3_path)
         else:
             uploaded_files = files_to_upload  # For dry run reporting
         
         # Step 6: Upload manifest to S3 (if we have uploaded files)
         if uploaded_files and not dry_run and manifest_path:
+            self.console.print("\n[bold blue]Step 7: Uploading manifest to S3...[/bold blue]")
             self._upload_manifest_to_s3(manifest_path, s3_path)
         
         return {
@@ -142,8 +161,6 @@ class SmartSync:
         """Compare local files with S3 and determine what needs uploading."""
         files_to_upload = []
         bucket, prefix = self._parse_s3_path(s3_path)
-        
-        self.console.print("🔄 Comparing with S3 (using SHA256 checksums)...")
         
         for local_file in local_files:
             s3_key = f"{prefix.rstrip('/')}/{local_file['filename']}"
@@ -181,17 +198,19 @@ class SmartSync:
         """Display the upload plan to the user."""
         action = "Would upload" if dry_run else "Will upload"
         
-        self.console.print(f"\n[bold green]📋 Upload Plan[/bold green]")
-        self.console.print(f"Destination: {s3_path}")
+        self.console.print(f"\n[bold green]Upload Plan[/bold green]")
         
-        table = Table()
-        table.add_column("File", style="cyan")
-        table.add_column("Size", style="green")
-        table.add_column("Reason", style="yellow")
-        table.add_column("SHA256", style="dim")
+        table = Table(border_style="bright_black")
+        table.add_column("File", style="bright_black")
+        table.add_column("Size", style="bright_black")
+        table.add_column("Reason", style="bright_black")
+        table.add_column("SHA256", style="bright_black")
+        
+        # Sort files by filename for consistent, predictable display
+        sorted_files = sorted(files_to_upload, key=lambda x: x['filename'])
         
         total_size = 0
-        for file_info in files_to_upload:
+        for file_info in sorted_files:
             size_mb = file_info['size'] / (1024 * 1024)
             total_size += file_info['size']
             
@@ -212,11 +231,8 @@ class SmartSync:
         uploaded_files = []
         bucket, prefix = self._parse_s3_path(s3_path)
         
-        self.console.print(f"\n[bold blue]⬆️ Uploading files...[/bold blue]")
-        
         for file_info in files_to_upload:
-            self.console.print(f"\n📤 Uploading {file_info['filename']} ({file_info['size'] / (1024*1024):.1f} MB)...")
-            
+            self.console.print()  # Add spacing before each upload
             try:
                 s3_key = f"{prefix.rstrip('/')}/{file_info['filename']}"
                 s3_url = f"s3://{bucket}/{s3_key}"
@@ -237,17 +253,16 @@ class SmartSync:
                 result = subprocess.run(cmd, check=True)
                 
                 uploaded_files.append(file_info)
-                self.console.print(f"[green]✅ Successfully uploaded: {file_info['filename']}[/green]")
+                self.console.print(f"[green]Successfully uploaded: {file_info['filename']}[/green]")
                 
             except subprocess.CalledProcessError as e:
-                self.console.print(f"[red]❌ Failed to upload {file_info['filename']}: {e}[/red]")
+                self.console.print(f"[red]Failed to upload {file_info['filename']}: {e}[/red]")
                 raise
         
         return uploaded_files
     
     def _generate_and_save_manifest_locally(self, files_to_upload: List[Dict], s3_path: str, local_path: Path) -> str:
         """Generate and save manifest file locally."""
-        self.console.print("\n[bold blue]📄 Generating manifest...[/bold blue]")
         
         # Generate manifest
         manifest = self.manifest_generator.generate_manifest(
@@ -266,7 +281,6 @@ class SmartSync:
         local_manifest_path = local_path / manifest_filename
         
         # Save manifest locally first
-        self.console.print(f"💾 Saving manifest locally: {local_manifest_path}")
         self.manifest_generator.save_manifest(manifest, local_manifest_path)
         
         return str(local_manifest_path)
@@ -286,13 +300,12 @@ class SmartSync:
                 "--profile", self.config.aws.profile
             ]
             
-            self.console.print(f"⬆️ Uploading manifest to S3...")
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             
-            self.console.print(f"[green]✅ Manifest uploaded: {manifest_s3_url}[/green]")
+            self.console.print(f"[green]Manifest uploaded: {manifest_s3_url}[/green]")
             
         except subprocess.CalledProcessError as e:
-            self.console.print(f"[red]❌ Failed to upload manifest: {e}[/red]")
+            self.console.print(f"[red]Failed to upload manifest: {e}[/red]")
             if e.stderr:
                 self.console.print(f"[red]Error: {e.stderr}[/red]")
             raise
@@ -338,19 +351,19 @@ class SmartSync:
             return True
             
         except self.s3_client.exceptions.NoSuchBucket:
-            self.console.print(f"[red]❌ S3 bucket '{bucket}' does not exist[/red]")
+            self.console.print(f"[red]S3 bucket '{bucket}' does not exist[/red]")
             return False
         except self.s3_client.exceptions.ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', 'Unknown')
             if error_code == 'AccessDenied':
-                self.console.print(f"[red]❌ Access denied to S3 bucket '{bucket}'[/red]")
-                self.console.print("[yellow]💡 Check your AWS credentials and IAM permissions[/yellow]")
+                self.console.print(f"[red]Access denied to S3 bucket '{bucket}'[/red]")
+                self.console.print("[yellow]Check your AWS credentials and IAM permissions[/yellow]")
             elif error_code == 'Forbidden':
-                self.console.print(f"[red]❌ Forbidden access to S3 bucket '{bucket}'[/red]")
-                self.console.print("[yellow]💡 Your AWS profile may not have the required permissions[/yellow]")
+                self.console.print(f"[red]Forbidden access to S3 bucket '{bucket}'[/red]")
+                self.console.print("[yellow]Your AWS profile may not have the required permissions[/yellow]")
             else:
-                self.console.print(f"[red]❌ S3 access error: {error_code} - {e}[/red]")
+                self.console.print(f"[red]S3 access error: {error_code} - {e}[/red]")
             return False
         except Exception as e:
-            self.console.print(f"[red]❌ Unexpected error validating S3 access: {e}[/red]")
+            self.console.print(f"[red]Unexpected error validating S3 access: {e}[/red]")
             return False

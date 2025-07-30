@@ -52,13 +52,11 @@ def sync(
     
     # Determine local directory to scan
     if local_path:
+        # Use provided local path
         current_dir = Path(local_path).resolve()
     else:
         # Use current working directory
         current_dir = Path.cwd()
-    
-    if dry_run:
-        console.print("[yellow]DRY RUN MODE - No files will be uploaded[/yellow]")
     
     # Initialize sync engine
     try:
@@ -90,11 +88,11 @@ def sync(
 @app.command()
 def init() -> None:
     """Initialize configuration for HCA Smart Sync."""
-    console.print("[bold blue]Initializing HCA Smart Sync Configuration[/bold blue]")
+    console.print("Initializing HCA Smart Sync Configuration")
     
     try:
         config = Config()
-        console.print("[green]✓ Configuration initialized successfully[/green]")
+        console.print("[green]Configuration initialized successfully[/green]")
         _display_config(config)
     except Exception as e:
         console.print(f"[red]Failed to initialize configuration: {e}[/red]")
@@ -143,12 +141,20 @@ def _display_config(
 def _display_results(result: dict, dry_run: bool) -> None:
     """Display sync results."""
     action = "Would upload" if dry_run else "Uploaded"
+    file_count = result.get('files_uploaded', 0)
+    cancelled = result.get('cancelled', False)
     
-    console.print(f"\n[bold green]✓ Sync completed successfully[/bold green]")
-    console.print(f"{action} {result.get('files_uploaded', 0)} files")
-    
-    if result.get('manifest_path'):
-        console.print(f"Manifest: {result['manifest_path']}")
+    if dry_run:
+        console.print("\n[green]Dry run completed[/green]")
+        console.print()
+    elif cancelled:
+        console.print("\n" + action + " " + str(file_count) + " file(s)", highlight=False)
+        console.print("[green]Sync canceled by user[/green]")
+        console.print()
+    else:
+        console.print("\n" + action + " " + str(file_count) + " file(s)", highlight=False)
+        console.print("[green]Sync completed successfully[/green]")
+        console.print()
 
 
 def main() -> None:

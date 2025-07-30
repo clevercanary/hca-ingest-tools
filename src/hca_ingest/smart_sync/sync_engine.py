@@ -101,9 +101,12 @@ class SmartSync:
             self.console.print("Found " + str(len(local_files)) + " .h5ad files - all up to date")
             return {"files_uploaded": 0, "manifest_path": None}
         
+        # Sort files alphabetically once for consistent ordering throughout workflow
+        files_to_upload = sorted(files_to_upload, key=lambda x: x['filename'])
+        
         self.console.print("[bold blue]Step 4: Creating upload plan...[/bold blue]")
         
-        # Step 3: Display upload plan
+        # Step 3: Display upload plan (already sorted)
         self._display_upload_plan(files_to_upload, s3_path, dry_run)
         
         # Step 4.5: Get user confirmation (unless dry run or force)
@@ -206,11 +209,8 @@ class SmartSync:
         table.add_column("Reason", style="bright_black")
         table.add_column("SHA256", style="bright_black")
         
-        # Sort files by filename for consistent, predictable display
-        sorted_files = sorted(files_to_upload, key=lambda x: x['filename'])
-        
         total_size = 0
-        for file_info in sorted_files:
+        for file_info in files_to_upload:
             size_mb = file_info['size'] / (1024 * 1024)
             total_size += file_info['size']
             
@@ -231,10 +231,7 @@ class SmartSync:
         uploaded_files = []
         bucket, prefix = self._parse_s3_path(s3_path)
         
-        # Sort files by filename for consistent upload order (matches display order)
-        sorted_files = sorted(files_to_upload, key=lambda x: x['filename'])
-        
-        for file_info in sorted_files:
+        for file_info in files_to_upload:
             self.console.print()  # Add spacing before each upload
             try:
                 s3_key = f"{prefix.rstrip('/')}/{file_info['filename']}"

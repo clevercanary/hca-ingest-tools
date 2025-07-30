@@ -42,7 +42,10 @@ class ManifestGenerator:
         }
         
         # Add file information
-        for file_path in files:
+        # Sort files by filename for consistent manifest ordering
+        sorted_files = sorted(files, key=lambda f: f.name)
+        
+        for file_path in sorted_files:
             if file_path.exists():
                 file_info = {
                     "filename": file_path.name,

@@ -300,6 +300,37 @@ class TestManifestGenerator:
         finally:
             if temp_path.exists():
                 temp_path.unlink()
+    
+    def test_manifest_alphabetical_order(self, tmp_path):
+        """Test that files in manifest are ordered alphabetically."""
+        from hca_ingest.smart_sync.manifest import ManifestGenerator
+        
+        # Create test files with non-alphabetical creation order
+        files = ["zebra.h5ad", "alpha.h5ad", "beta.h5ad"]
+        file_paths = []
+        for filename in files:
+            test_file = tmp_path / filename
+            test_file.write_text("test content for checksum")
+            file_paths.append(test_file)
+        
+        # Create manifest generator
+        manifest_gen = ManifestGenerator()
+        
+        # Generate manifest with unsorted file list
+        manifest = manifest_gen.generate_manifest(
+            files=file_paths,
+            metadata={"test": "data"}
+        )
+        
+        # Extract filenames from manifest
+        manifest_filenames = [file_info["filename"] for file_info in manifest["files"]]
+        
+        # Verify files are in alphabetical order in manifest
+        expected_order = ["alpha.h5ad", "beta.h5ad", "zebra.h5ad"]
+        assert manifest_filenames == expected_order, f"Expected {expected_order}, got {manifest_filenames}"
+        
+        # Verify all files were included
+        assert len(manifest["files"]) == 3
 
 
 class TestSyncEngine:

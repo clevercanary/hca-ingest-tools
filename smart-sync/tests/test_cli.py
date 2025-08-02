@@ -61,6 +61,39 @@ class TestCLI:
         # Should either fail or show some error (depending on validation)
         # This test mainly ensures the command structure works
         assert result.exit_code in [0, 1]  # Either succeeds (dry run) or fails (validation)
+    
+    def test_sync_command_with_invalid_environment(self):
+        """Test sync command with invalid environment value."""
+        # Test with invalid environment value - should be rejected by Typer enum validation
+        result = self.runner.invoke(app, ["gut-v1", "--environment", "devv", "--dry-run"])
+        
+        # Should fail due to invalid environment enum value
+        assert result.exit_code != 0
+        # Check that error message mentions valid choices (Typer errors go to stderr)
+        error_output = result.stderr if result.stderr else result.stdout
+        assert "is not one of" in error_output or "Invalid value" in error_output
+    
+    def test_sync_command_with_valid_environments(self):
+        """Test sync command with valid environment values."""
+        # Test with valid environment values - should pass Typer enum validation
+        # Note: These may still fail later due to AWS access, but enum validation should pass
+        
+        # Test prod environment
+        result_prod = self.runner.invoke(app, ["gut-v1", "--environment", "prod", "--dry-run"])
+        # Should not fail due to enum validation (may fail later for other reasons)
+        # If it fails, it shouldn't be due to invalid enum value
+        if result_prod.exit_code != 0:
+            error_output = result_prod.stderr if result_prod.stderr else result_prod.stdout
+            assert "is not one of" not in error_output
+            assert "Invalid value for '--environment'" not in error_output
+        
+        # Test dev environment  
+        result_dev = self.runner.invoke(app, ["gut-v1", "--environment", "dev", "--dry-run"])
+        # Should not fail due to enum validation (may fail later for other reasons)
+        if result_dev.exit_code != 0:
+            error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
+            assert "is not one of" not in error_output
+            assert "Invalid value for '--environment'" not in error_output
 
 
 class TestHelperFunctions:

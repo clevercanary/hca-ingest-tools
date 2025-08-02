@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from hca_ingest.config import Config, AWSConfig, S3Config
+from hca_smart_sync.config import Config, AWSConfig, S3Config
 
 
 class TestConfig:

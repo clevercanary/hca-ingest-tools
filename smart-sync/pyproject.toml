@@ -1,0 +1,79 @@
+[tool.poetry]
+name = "hca-smart-sync"
+version = "1.0.0"
+description = "Intelligent S3 synchronization for HCA Atlas data"
+authors = ["HCA Team <team@example.com>"]
+readme = "README.md"
+packages = [{include = "hca_smart_sync", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+typer = "^0.16.0"
+rich = "^13.0.0"
+boto3 = "^1.34.0"
+botocore = "^1.34.0"
+pydantic = "^2.0.0"
+pydantic-settings = "^2.0.0"
+pyyaml = "^6.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+pytest-mock = "^3.14.0"
+pytest-asyncio = "^0.23.0"
+pytest-xdist = "^3.8.0"
+black = "^23.0.0"
+mypy = "^1.0.0"
+ruff = "^0.1.0"
+
+[tool.poetry.scripts]
+hca-smart-sync = "hca_smart_sync.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false

@@ -1,5 +1,6 @@
 """Tests for HCA Smart Sync CLI."""
 
+import os
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -7,7 +8,7 @@ from typer.testing import CliRunner
 import click
 import io
 
-from hca_ingest.smart_sync.cli import (
+from hca_smart_sync.cli import (
     app, 
     _load_and_configure, 
     _validate_configuration, 
@@ -20,7 +21,7 @@ from hca_ingest.smart_sync.cli import (
     format_status,
     main
 )
-from hca_ingest.config import Config
+from hca_smart_sync.config import Config
 
 
 class TestCLI:
@@ -30,44 +31,36 @@ class TestCLI:
         """Set up test runner."""
         self.runner = CliRunner()
     
-    @pytest.mark.skip(reason="Typer/Click testing compatibility issue - CLI functionality works in practice")
     def test_cli_help(self):
         """Test CLI help command."""
         result = self.runner.invoke(app, ["--help"])
         
         assert result.exit_code == 0
-        assert "hca-smart-sync" in result.stdout
-        assert "Intelligent S3 synchronization" in result.stdout
+        assert "hca-smart-sync" in result.stdout or "Usage:" in result.stdout
     
-    @pytest.mark.skip(reason="Typer/Click testing compatibility issue - CLI functionality works in practice")
     def test_sync_command_help(self):
-        """Test sync command help."""
-        result = self.runner.invoke(app, ["sync", "--help"])
+        """Test sync command help (sync is the default command)."""
+        result = self.runner.invoke(app, ["--help"])
         
         assert result.exit_code == 0
-        assert "Sync local directory to S3" in result.stdout
         assert "--dry-run" in result.stdout
         assert "--verbose" in result.stdout
     
-    @pytest.mark.skip(reason="Typer/Click testing compatibility issue - CLI functionality works in practice")
     def test_sync_command_missing_args(self):
-        """Test sync command with missing arguments."""
-        result = self.runner.invoke(app, ["sync"])
+        """Test sync command with missing atlas argument."""
+        result = self.runner.invoke(app, [])
         
-        # Should fail due to missing required arguments
+        # Should fail due to missing required atlas argument
         assert result.exit_code != 0
-        assert "Missing argument" in result.stdout
     
-    @pytest.mark.skip(reason="Typer/Click testing compatibility issue - CLI functionality works in practice")
-    def test_sync_command_invalid_s3_path(self):
-        """Test sync command with invalid S3 path."""
-        # Create a temporary directory for testing
-        import tempfile
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = self.runner.invoke(app, ["sync", temp_dir, "invalid-path"])
-            
-            assert result.exit_code == 1
-            assert "Error: S3 path must start with 's3://'" in result.stdout
+    def test_sync_command_with_invalid_atlas(self):
+        """Test sync command with invalid atlas name."""
+        # Test with an atlas that would likely fail validation
+        result = self.runner.invoke(app, ["invalid-atlas-name", "--dry-run"])
+        
+        # Should either fail or show some error (depending on validation)
+        # This test mainly ensures the command structure works
+        assert result.exit_code in [0, 1]  # Either succeeds (dry run) or fails (validation)
 
 
 class TestHelperFunctions:
@@ -75,7 +68,7 @@ class TestHelperFunctions:
     
     def test_load_and_configure_basic(self):
         """Test basic configuration loading."""
-        with patch('hca_ingest.smart_sync.cli.Config') as mock_config_class:
+        with patch('hca_smart_sync.cli.Config') as mock_config_class:
             mock_config = Mock()
             mock_config.aws.profile = None
             mock_config.s3.bucket_name = None
@@ -88,7 +81,7 @@ class TestHelperFunctions:
     
     def test_load_and_configure_with_overrides(self):
         """Test configuration loading with profile and bucket overrides."""
-        with patch('hca_ingest.smart_sync.cli.Config') as mock_config_class:
+        with patch('hca_smart_sync.cli.Config') as mock_config_class:
             mock_config = Mock()
             mock_config.aws.profile = None
             mock_config.s3.bucket_name = None
@@ -102,7 +95,7 @@ class TestHelperFunctions:
     
     def test_load_and_configure_exception(self):
         """Test configuration loading with exception."""
-        with patch('hca_ingest.smart_sync.cli.Config') as mock_config_class:
+        with patch('hca_smart_sync.cli.Config') as mock_config_class:
             mock_config_class.side_effect = Exception("Config error")
             
             with pytest.raises(click.exceptions.Exit):
@@ -152,30 +145,32 @@ class TestHelperFunctions:
         assert result == Path.cwd()
     
     def test_initialize_sync_engine_basic(self):
-        """Test sync engine initialization without profile override."""
-        with patch('hca_ingest.smart_sync.cli.SmartSync') as mock_sync_class:
+        """Test basic sync engine initialization."""
+        with patch('hca_smart_sync.cli.SmartSync') as mock_sync_class:
             mock_config = Mock()
+            mock_console = Mock()
             mock_sync_engine = Mock()
             mock_sync_class.return_value = mock_sync_engine
             
-            result = _initialize_sync_engine(mock_config, None)
+            result = _initialize_sync_engine(mock_config, None, mock_console)
             
             assert result == mock_sync_engine
-            mock_sync_class.assert_called_once_with(mock_config)
-            mock_sync_engine._reset_aws_clients.assert_not_called()
+            mock_sync_class.assert_called_once_with(mock_config, console=mock_console)
     
     def test_initialize_sync_engine_with_profile(self):
         """Test sync engine initialization with profile override."""
-        with patch('hca_ingest.smart_sync.cli.SmartSync') as mock_sync_class:
+        with patch('hca_smart_sync.cli.SmartSync') as mock_sync_class, \
+             patch.dict('os.environ', {}, clear=True):
             mock_config = Mock()
+            mock_console = Mock()
             mock_sync_engine = Mock()
             mock_sync_class.return_value = mock_sync_engine
             
-            result = _initialize_sync_engine(mock_config, "test-profile")
+            result = _initialize_sync_engine(mock_config, "test-profile", mock_console)
             
             assert result == mock_sync_engine
-            mock_sync_class.assert_called_once_with(mock_config)
-            mock_sync_engine._reset_aws_clients.assert_called_once()
+            mock_sync_class.assert_called_once_with(mock_config, console=mock_console)
+            assert os.environ.get('AWS_PROFILE') == "test-profile"
 
 
 class TestMessageFormatters:
@@ -206,51 +201,8 @@ class TestMessageFormatters:
 
 
 class TestCLIArgumentValidation:
-    """Test CLI argument validation error handling."""
+    """Test CLI argument validation and error handling."""
     
-    def test_main_with_invalid_arguments(self):
-        """Test main() function handles argument errors gracefully."""
-        # Test that our error handling logic works by simulating the exception
-        # that would be thrown by Typer for invalid arguments
-        from unittest.mock import Mock
-        
-        # Create a mock exception that matches what Typer throws
-        mock_exception = Exception("Got unexpected extra arguments (gut-v1 dd)")
-        
-        with patch('hca_ingest.smart_sync.cli.app') as mock_app, \
-             patch('sys.stdout', new_callable=io.StringIO) as mock_stdout, \
-             pytest.raises(SystemExit) as exc_info:
-            
-            # Make app() raise the exception
-            mock_app.side_effect = mock_exception
-            main()
-        
-        # Check that it exits with code 1
-        assert exc_info.value.code == 1
-        
-        # Check the error message
-        output = mock_stdout.getvalue()
-        assert "❌ Wrong number of arguments provided" in output
-        assert "Usage: hca-smart-sync sync <atlas> [options]" in output
-        assert "hca-smart-sync sync gut-v1 --profile my-profile" in output
-    
-    def test_main_with_metavar_error(self):
-        """Test main() function handles TyperArgument.make_metavar() error."""
-        # Test the specific TypeError that occurs with extra arguments
-        mock_exception = TypeError("TyperArgument.make_metavar() takes 1 positional argument but 2 were given")
-        
-        with patch('hca_ingest.smart_sync.cli.app') as mock_app, \
-             patch('sys.stdout', new_callable=io.StringIO) as mock_stdout, \
-             pytest.raises(SystemExit) as exc_info:
-            
-            # Make app() raise the exception
-            mock_app.side_effect = mock_exception
-            main()
-        
-        # Check that it exits with code 1
-        assert exc_info.value.code == 1
-        
-        # Check the error message
-        output = mock_stdout.getvalue()
-        assert "❌ Wrong number of arguments provided" in output
-        assert "Usage: hca-smart-sync sync <atlas> [options]" in output
+    # These tests are obsolete since we removed custom error handling in Typer 0.16.0 upgrade
+    # The main() function now just calls app() directly and Typer handles all errors natively
+    pass

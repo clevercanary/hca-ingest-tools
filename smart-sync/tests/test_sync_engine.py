@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 
-from hca_ingest.config import Config, AWSConfig, S3Config, ManifestConfig
-from hca_ingest.smart_sync.sync_engine import SmartSync
+from hca_smart_sync.config import Config, AWSConfig, S3Config, ManifestConfig
+from hca_smart_sync.sync_engine import SmartSync
 
 
 class TestSmartSync:

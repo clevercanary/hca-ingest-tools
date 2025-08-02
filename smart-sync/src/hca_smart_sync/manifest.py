@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from hca_ingest.smart_sync.checksum import ChecksumCalculator
+from hca_smart_sync.checksum import ChecksumCalculator
 
 
 class ManifestGenerator:

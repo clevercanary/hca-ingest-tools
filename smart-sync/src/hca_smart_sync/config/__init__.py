@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -38,9 +38,9 @@ class Config(BaseSettings):
     """Main configuration class for HCA Ingest Tools."""
     
     # AWS Configuration
-    aws: AWSConfig = Field(default_factory=AWSConfig)
-    s3: S3Config = Field(default_factory=S3Config)
-    manifest: ManifestConfig = Field(default_factory=ManifestConfig)
+    aws: AWSConfig = Field(default_factory=AWSConfig, description="AWS configuration")
+    s3: S3Config = Field(default_factory=S3Config, description="S3 configuration")
+    manifest: ManifestConfig = Field(default_factory=ManifestConfig, description="Manifest configuration")
     
     # Tool Configuration
     verbose: bool = Field(default=False, description="Enable verbose logging")
@@ -50,12 +50,12 @@ class Config(BaseSettings):
         description="Configuration directory"
     )
     
-    class Config:
-        """Pydantic configuration."""
-        env_prefix = "HCA_"
-        env_nested_delimiter = "__"
-        case_sensitive = False
-        
+    model_config = ConfigDict(
+        env_prefix="HCA_",
+        env_nested_delimiter="__",
+        case_sensitive=False
+    )
+    
     @classmethod
     def from_env(cls) -> "Config":
         """Create configuration from environment variables."""
@@ -69,6 +69,11 @@ class Config(BaseSettings):
             s3=S3Config(
                 bucket_name=os.getenv("HCA_S3_BUCKET"),
                 use_transfer_acceleration=os.getenv("HCA_S3_TRANSFER_ACCELERATION", "false").lower() == "true",
+            ),
+            manifest=ManifestConfig(
+                include_checksums=os.getenv("HCA_MANIFEST_INCLUDE_CHECKSUMS", "true").lower() == "true",
+                include_metadata=os.getenv("HCA_MANIFEST_INCLUDE_METADATA", "true").lower() == "true",
+                manifest_filename=os.getenv("HCA_MANIFEST_FILENAME", "submission_manifest.json"),
             ),
             verbose=os.getenv("HCA_VERBOSE", "false").lower() == "true",
             dry_run=os.getenv("HCA_DRY_RUN", "false").lower() == "true",

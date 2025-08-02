@@ -173,59 +173,6 @@ def sync(
         raise typer.Exit(1)
 
 
-@app.command()
-def init() -> None:
-    """Initialize configuration for HCA Smart Sync."""
-    console.print(success_msg(Messages.CONFIG_INITIALIZING))
-    
-    try:
-        config = Config()
-        console.print(success_msg(Messages.CONFIG_INITIALIZED))
-        _display_config(config)
-    except Exception as e:
-        console.print(error_msg(Messages.CONFIG_INIT_ERROR.format(error=e)))
-        raise typer.Exit(1)
-
-
-@app.command()
-def config_show() -> None:
-    """Show current configuration."""
-    try:
-        config = Config()
-        _display_config(config)
-    except Exception as e:
-        console.print(error_msg(Messages.CONFIG_SHOW_ERROR.format(error=e)))
-        raise typer.Exit(1)
-
-
-def _display_config(
-    config: Config, 
-    local_path: Optional[Path] = None, 
-    s3_path: Optional[str] = None,
-    atlas: Optional[str] = None,
-    folder: Optional[str] = None
-) -> None:
-    """Display current configuration."""
-    table = Table(title="HCA Smart Sync Configuration")
-    table.add_column("Setting", style="cyan")
-    table.add_column("Value", style="green")
-    
-    table.add_row("AWS Profile", config.aws.profile or "default")
-    table.add_row("AWS Region", config.aws.region)
-    table.add_row("S3 Bucket", config.s3.bucket_name or "Not configured")
-    
-    if atlas:
-        table.add_row("Atlas", atlas)
-    if folder:
-        table.add_row("Target Folder", folder)
-    if local_path:
-        table.add_row("Local Path", str(local_path))
-    if s3_path:
-        table.add_row("S3 Path", s3_path)
-    
-    console.print(table)
-
-
 def _display_results(result: dict, dry_run: bool) -> None:
     """Display sync results."""
     file_count = result.get('files_uploaded', 0)

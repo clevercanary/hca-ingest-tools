@@ -47,21 +47,6 @@ class TestCLI:
         assert "--dry-run" in result.stdout
         assert "--verbose" in result.stdout
     
-    def test_init_command(self):
-        """Test init command."""
-        result = self.runner.invoke(app, ["init"])
-        
-        assert result.exit_code == 0
-        assert "Initializing HCA Smart Sync" in result.stdout
-    
-    def test_config_show_command(self):
-        """Test config-show command."""
-        result = self.runner.invoke(app, ["config-show"])
-        
-        assert result.exit_code == 0
-        # Should show configuration table
-        assert "Configuration" in result.stdout
-    
     @pytest.mark.skip(reason="Typer/Click testing compatibility issue - CLI functionality works in practice")
     def test_sync_command_missing_args(self):
         """Test sync command with missing arguments."""

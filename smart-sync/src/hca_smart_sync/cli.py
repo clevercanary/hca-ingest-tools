@@ -2,6 +2,7 @@
 
 import os
 import sys
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 from typing_extensions import Annotated
@@ -173,13 +174,17 @@ def _initialize_sync_engine(config: Config, profile: Optional[str], console: Con
     
     return SmartSync(config, console=console)
 
+class Environment(str, Enum):
+    prod = "prod"
+    dev = "dev"
+
 @app.command()
 def sync(
     atlas: Annotated[str, typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1)")],
     dry_run: Annotated[bool, typer.Option(help="Dry run mode")] = False,
     verbose: Annotated[bool, typer.Option(help="Verbose output")] = False,
     profile: Annotated[Optional[str], typer.Option(help="AWS profile")] = None,
-    environment: Annotated[str, typer.Option(help="Environment: prod or dev (default: prod)")] = "prod",
+    environment: Annotated[Environment, typer.Option(help="Environment: prod or dev (default: prod)")] = Environment.prod,
     folder: Annotated[str, typer.Option(help="Target folder (default: source-datasets)")] = "source-datasets",
     force: Annotated[bool, typer.Option(help="Force upload")] = False,
     local_path: Annotated[Optional[str], typer.Option(help="Local directory to scan (defaults to current directory)")] = None,
@@ -187,13 +192,10 @@ def sync(
     """Sync .h5ad files from local directory to S3."""
     
     # Determine bucket based on environment
-    if environment == "dev":
-        bucket = "hca-atlas-tracker-data-dev"
-    elif environment == "prod":
+    if environment == Environment.prod:
         bucket = "hca-atlas-tracker-data"
-    else:
-        console.print("[red]❌ Invalid environment. Must be 'prod' or 'dev'[/red]")
-        raise typer.Exit(1)
+    elif environment == Environment.dev:
+        bucket = "hca-atlas-tracker-data-dev"
     
     # Load and validate configuration
     config = _load_and_configure(profile, bucket)

@@ -2,8 +2,9 @@
 
 import os
 import pytest
+import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from typer.testing import CliRunner
 import click
 import io
@@ -15,6 +16,8 @@ from hca_smart_sync.cli import (
     _build_s3_path, 
     _resolve_local_path, 
     _initialize_sync_engine,
+    _check_aws_cli,
+    _display_aws_cli_installation_help,
     error_msg,
     success_msg,
     format_file_count,
@@ -255,3 +258,116 @@ class TestCLIArgumentValidation:
     # These tests are obsolete since we removed custom error handling in Typer 0.16.0 upgrade
     # The main() function now just calls app() directly and Typer handles all errors natively
     pass
+
+
+class TestAWSCLIDependencyCheck:
+    """Test AWS CLI dependency checking functionality."""
+    
+    def test_check_aws_cli_available(self):
+        """Test _check_aws_cli when AWS CLI is available."""
+        with patch('subprocess.run') as mock_run:
+            # Mock successful AWS CLI check
+            mock_result = Mock()
+            mock_result.returncode = 0
+            mock_run.return_value = mock_result
+            
+            result = _check_aws_cli()
+            
+            assert result is True
+            mock_run.assert_called_once_with(
+                ["aws", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+    
+    def test_check_aws_cli_not_found(self):
+        """Test _check_aws_cli when AWS CLI is not found."""
+        with patch('subprocess.run') as mock_run:
+            # Mock FileNotFoundError (command not found)
+            mock_run.side_effect = FileNotFoundError("aws command not found")
+            
+            result = _check_aws_cli()
+            
+            assert result is False
+    
+    def test_check_aws_cli_non_zero_exit(self):
+        """Test _check_aws_cli when AWS CLI returns non-zero exit code."""
+        with patch('subprocess.run') as mock_run:
+            # Mock non-zero exit code
+            mock_result = Mock()
+            mock_result.returncode = 1
+            mock_run.return_value = mock_result
+            
+            result = _check_aws_cli()
+            
+            assert result is False
+    
+    def test_check_aws_cli_timeout(self):
+        """Test _check_aws_cli when subprocess times out."""
+        with patch('subprocess.run') as mock_run:
+            # Mock timeout
+            mock_run.side_effect = subprocess.TimeoutExpired("aws", 10)
+            
+            result = _check_aws_cli()
+            
+            assert result is False
+    
+    def test_check_aws_cli_subprocess_error(self):
+        """Test _check_aws_cli with general subprocess error."""
+        with patch('subprocess.run') as mock_run:
+            # Mock general subprocess error
+            mock_run.side_effect = subprocess.SubprocessError("General error")
+            
+            result = _check_aws_cli()
+            
+            assert result is False
+    
+    def test_display_aws_cli_installation_help(self, capsys):
+        """Test _display_aws_cli_installation_help output."""
+        _display_aws_cli_installation_help()
+        
+        captured = capsys.readouterr()
+        output = captured.out
+        
+        # Check key elements are present
+        assert "AWS CLI is required but not found" in output
+        assert "brew install awscli" in output
+        assert "sudo apt update && sudo apt install awscli" in output
+        assert "winget install Amazon.AWSCLI" in output
+        assert "aws configure" in output
+
+    def test_debug_sync_command_output(self):
+        """Debug test to see what's actually happening in sync command."""
+        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
+             patch('hca_smart_sync.cli._display_banner') as mock_display_banner, \
+             patch('hca_smart_sync.cli._display_step') as mock_display_step:
+            
+            # Mock AWS CLI not available
+            mock_check_aws_cli.return_value = False
+            
+            # Mock config and paths
+            mock_config = Mock()
+            mock_config.s3.bucket_name = "test-bucket"
+            mock_load_config.return_value = mock_config
+            mock_validate_config.return_value = None
+            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mock_resolve_local_path.return_value = "/test/path"
+            
+            runner = CliRunner()
+            result = runner.invoke(app, ["sync", "gut-v1", "--dry-run"])
+            
+            # Debug output
+            print(f"\nDEBUG: Exit code: {result.exit_code}")
+            print(f"DEBUG: Output: {result.output}")
+            print(f"DEBUG: Exception: {result.exception}")
+            if result.exception:
+                import traceback
+                print(f"DEBUG: Traceback: {''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))}")
+            
+            # This test is just for debugging - don't assert anything
+            pass

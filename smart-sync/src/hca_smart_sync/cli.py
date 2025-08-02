@@ -2,6 +2,7 @@
 
 import os
 import sys
+import subprocess
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -174,6 +175,39 @@ def _initialize_sync_engine(config: Config, profile: Optional[str], console: Con
     
     return SmartSync(config, console=console)
 
+def _check_aws_cli() -> bool:
+    """Check if AWS CLI is installed and accessible."""
+    try:
+        result = subprocess.run(
+            ["aws", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
+        return False
+
+def _display_aws_cli_installation_help() -> None:
+    """Display helpful AWS CLI installation instructions."""
+    typer.secho("AWS CLI is required but not found on your system.", fg=typer.colors.RED)
+    
+    help_text = """
+Please install AWS CLI v2:
+
+macOS:     brew install awscli
+Linux:     sudo apt update && sudo apt install awscli  
+Windows:   winget install Amazon.AWSCLI
+
+Alternative: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+
+After installation, configure your credentials:
+  aws configure
+  # OR: aws configure --profile your-profile-name
+"""
+    typer.echo(help_text)
+
+
 class Environment(str, Enum):
     prod = "prod"
     dev = "dev"
@@ -208,15 +242,21 @@ def sync(
     # Display banner
     _display_banner(current_dir, s3_path, dry_run)
     
-    # Step 1: Validate S3 access
-    _display_step(1, "Validating S3 access")
+    # Step 1: Check AWS CLI dependency
+    _display_step(1, "Checking AWS CLI dependency")
+    if not _check_aws_cli():
+        _display_aws_cli_installation_help()
+        raise typer.Exit(1)
+    
+    # Step 2: Validate S3 access
+    _display_step(2, "Validating S3 access")
     
     # Initialize sync engine and perform sync
     try:
         sync_engine = _initialize_sync_engine(config, profile, console)
         
-        # Step 2: Scan local files
-        _display_step(2, "Scanning local file system for .h5ad files")
+        # Step 3: Scan local files
+        _display_step(3, "Scanning local file system for .h5ad files")
         
         # Perform sync to get upload plan (always get plan first except for dry_run)
         if dry_run:
@@ -251,8 +291,8 @@ def sync(
             console.print("\n[yellow]No .h5ad files found in directory[/yellow]")
             return
         
-        # Step 3: Compare with S3
-        _display_step(3, "Comparing with S3 (using SHA256 checksums)")
+        # Step 4: Compare with S3
+        _display_step(4, "Comparing with S3 (using SHA256 checksums)")
         
         # Display upload plan for all modes
         if 'files_to_upload' in result and result['files_to_upload']:
@@ -269,11 +309,11 @@ def sync(
                     return
                 console.print()  # Add blank line after confirmation
                 
-                # Step 4: Generate manifest
-                _display_step(4, "Generating and saving manifest locally")
+                # Step 5: Generate manifest
+                _display_step(5, "Generating and saving manifest locally")
                 
-                # Step 5: Upload files
-                _display_step(5, "Uploading files")
+                # Step 6: Upload files
+                _display_step(6, "Uploading files")
                 
                 # Upload with the original force setting (preserves normal vs force behavior)
                 result = sync_engine.sync(
@@ -285,9 +325,9 @@ def sync(
                     plan_only=False  # Actually execute the upload
                 )
                 
-                # Step 6: Upload manifest (if files were uploaded)
+                # Step 7: Upload manifest (if files were uploaded)
                 if result.get('files_uploaded', 0) > 0:
-                    _display_step(6, "Uploading manifest to S3")
+                    _display_step(7, "Uploading manifest to S3")
         else:
             # No files to upload
             console.print(f"\nFound {len(result.get('local_files', []))} .h5ad files - all up to date")
@@ -328,6 +368,9 @@ def _display_results(result: dict, dry_run: bool) -> None:
 
 def main() -> None:
     """Main entry point for the CLI."""
+    if not _check_aws_cli():
+        _display_aws_cli_installation_help()
+        raise typer.Exit(1)
     app()
 
 

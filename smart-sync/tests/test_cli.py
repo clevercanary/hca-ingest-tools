@@ -55,12 +55,18 @@ class TestCLI:
     
     def test_sync_command_with_invalid_atlas(self):
         """Test sync command with invalid atlas name."""
-        # Test with an atlas that would likely fail validation
-        result = self.runner.invoke(app, ["invalid-atlas-name", "--dry-run"])
-        
-        # Should either fail or show some error (depending on validation)
-        # This test mainly ensures the command structure works
-        assert result.exit_code in [0, 1]  # Either succeeds (dry run) or fails (validation)
+        # Mock AWS/sync engine to prevent real calls
+        with patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init:
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {"status": "error", "message": "Invalid atlas"}
+            mock_init.return_value = mock_sync_engine
+            
+            # Test with an atlas that would likely fail validation
+            result = self.runner.invoke(app, ["invalid-atlas-name", "--dry-run"])
+            
+            # Should either fail or show some error (depending on validation)
+            # This test mainly ensures the command structure works
+            assert result.exit_code in [0, 1]  # Either succeeds (dry run) or fails (validation)
     
     def test_sync_command_with_invalid_environment(self):
         """Test sync command with invalid environment value."""
@@ -75,25 +81,35 @@ class TestCLI:
     
     def test_sync_command_with_valid_environments(self):
         """Test sync command with valid environment values."""
-        # Test with valid environment values - should pass Typer enum validation
-        # Note: These may still fail later due to AWS access, but enum validation should pass
-        
-        # Test prod environment
-        result_prod = self.runner.invoke(app, ["gut-v1", "--environment", "prod", "--dry-run"])
-        # Should not fail due to enum validation (may fail later for other reasons)
-        # If it fails, it shouldn't be due to invalid enum value
-        if result_prod.exit_code != 0:
-            error_output = result_prod.stderr if result_prod.stderr else result_prod.stdout
-            assert "is not one of" not in error_output
-            assert "Invalid value for '--environment'" not in error_output
-        
-        # Test dev environment  
-        result_dev = self.runner.invoke(app, ["gut-v1", "--environment", "dev", "--dry-run"])
-        # Should not fail due to enum validation (may fail later for other reasons)
-        if result_dev.exit_code != 0:
-            error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
-            assert "is not one of" not in error_output
-            assert "Invalid value for '--environment'" not in error_output
+        # Mock AWS/sync engine to prevent real calls
+        with patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init:
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {
+                "status": "success", 
+                "files_to_upload": [],
+                "message": "No files to upload"
+            }
+            mock_init.return_value = mock_sync_engine
+            
+            # Test with valid environment values - should pass Typer enum validation
+            # Note: These may still fail later due to AWS access, but enum validation should pass
+            
+            # Test prod environment
+            result_prod = self.runner.invoke(app, ["gut-v1", "--environment", "prod", "--dry-run"])
+            # Should not fail due to enum validation (may fail later for other reasons)
+            # If it fails, it shouldn't be due to invalid enum value
+            if result_prod.exit_code != 0:
+                error_output = result_prod.stderr if result_prod.stderr else result_prod.stdout
+                assert "is not one of" not in error_output
+                assert "Invalid value for '--environment'" not in error_output
+            
+            # Test dev environment  
+            result_dev = self.runner.invoke(app, ["gut-v1", "--environment", "dev", "--dry-run"])
+            # Should not fail due to enum validation (may fail later for other reasons)
+            if result_dev.exit_code != 0:
+                error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
+                assert "is not one of" not in error_output
+                assert "Invalid value for '--environment'" not in error_output
 
 
 class TestHelperFunctions:

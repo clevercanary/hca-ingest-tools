@@ -123,15 +123,24 @@ def _initialize_sync_engine(config: Config, profile: Optional[str]) -> SmartSync
 @app.command()
 def sync(
     atlas: str = typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1)"),
-    bucket: Optional[str] = typer.Argument(None, help="S3 bucket name"),
     folder: str = typer.Argument("source-datasets", help="Target folder"),
     dry_run: bool = typer.Option(False, help="Dry run mode"),
     verbose: bool = typer.Option(False, help="Verbose output"),
     profile: Optional[str] = typer.Option(None, help="AWS profile"),
+    environment: str = typer.Option("prod", help="Environment: prod or dev (default: prod)"),
     force: bool = typer.Option(False, help="Force upload"),
     local_path: Optional[str] = typer.Option(None, help="Local directory to scan (defaults to current directory)"),
 ) -> None:
     """Sync .h5ad files from local directory to S3."""
+    
+    # Determine bucket based on environment
+    if environment == "dev":
+        bucket = "hca-atlas-tracker-data-dev"
+    elif environment == "prod":
+        bucket = "hca-atlas-tracker-data"
+    else:
+        console.print("[red]❌ Invalid environment. Must be 'prod' or 'dev'[/red]")
+        raise typer.Exit(1)
     
     # Load and validate configuration
     config = _load_and_configure(profile, bucket)

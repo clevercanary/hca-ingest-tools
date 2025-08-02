@@ -123,11 +123,11 @@ def _initialize_sync_engine(config: Config, profile: Optional[str]) -> SmartSync
 @app.command()
 def sync(
     atlas: str = typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1)"),
-    folder: str = typer.Argument("source-datasets", help="Target folder"),
     dry_run: bool = typer.Option(False, help="Dry run mode"),
     verbose: bool = typer.Option(False, help="Verbose output"),
     profile: Optional[str] = typer.Option(None, help="AWS profile"),
     environment: str = typer.Option("prod", help="Environment: prod or dev (default: prod)"),
+    folder: str = typer.Option("source-datasets", help="Target folder (default: source-datasets)"),
     force: bool = typer.Option(False, help="Force upload"),
     local_path: Optional[str] = typer.Option(None, help="Local directory to scan (defaults to current directory)"),
 ) -> None:
@@ -199,7 +199,28 @@ def _display_results(result: dict, dry_run: bool) -> None:
 
 def main() -> None:
     """Main entry point for the CLI."""
-    app()
+    try:
+        app()
+    except Exception as e:
+        # Handle Click/Typer usage errors with clean messages
+        error_msg = str(e)
+        if ("Got unexpected extra arguments" in error_msg or 
+            "TyperArgument.make_metavar()" in error_msg or
+            "takes 1 positional argument but 2 were given" in error_msg):
+            # Use basic print to avoid Rich formatting issues
+            print()
+            print("❌ Wrong number of arguments provided")
+            print()
+            print("Usage: hca-smart-sync sync <atlas> [options]")
+            print()
+            print("Examples:")
+            print("  hca-smart-sync sync gut-v1 --profile my-profile")
+            print("  hca-smart-sync sync immune-v1 --profile my-profile")
+            print()
+            exit(1)
+        else:
+            # Re-raise other exceptions
+            raise
 
 
 if __name__ == "__main__":

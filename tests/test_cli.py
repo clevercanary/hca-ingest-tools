@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 import click
+import io
 
 from hca_ingest.smart_sync.cli import (
     app, 
@@ -16,7 +17,8 @@ from hca_ingest.smart_sync.cli import (
     error_msg,
     success_msg,
     format_file_count,
-    format_status
+    format_status,
+    main
 )
 from hca_ingest.config import Config
 
@@ -201,3 +203,54 @@ class TestMessageFormatters:
         """Test status formatting."""
         result = format_status("Sync completed successfully")
         assert result == "[green]Sync completed successfully[/green]"
+
+
+class TestCLIArgumentValidation:
+    """Test CLI argument validation error handling."""
+    
+    def test_main_with_invalid_arguments(self):
+        """Test main() function handles argument errors gracefully."""
+        # Test that our error handling logic works by simulating the exception
+        # that would be thrown by Typer for invalid arguments
+        from unittest.mock import Mock
+        
+        # Create a mock exception that matches what Typer throws
+        mock_exception = Exception("Got unexpected extra arguments (gut-v1 dd)")
+        
+        with patch('hca_ingest.smart_sync.cli.app') as mock_app, \
+             patch('sys.stdout', new_callable=io.StringIO) as mock_stdout, \
+             pytest.raises(SystemExit) as exc_info:
+            
+            # Make app() raise the exception
+            mock_app.side_effect = mock_exception
+            main()
+        
+        # Check that it exits with code 1
+        assert exc_info.value.code == 1
+        
+        # Check the error message
+        output = mock_stdout.getvalue()
+        assert "❌ Wrong number of arguments provided" in output
+        assert "Usage: hca-smart-sync sync <atlas> [options]" in output
+        assert "hca-smart-sync sync gut-v1 --profile my-profile" in output
+    
+    def test_main_with_metavar_error(self):
+        """Test main() function handles TyperArgument.make_metavar() error."""
+        # Test the specific TypeError that occurs with extra arguments
+        mock_exception = TypeError("TyperArgument.make_metavar() takes 1 positional argument but 2 were given")
+        
+        with patch('hca_ingest.smart_sync.cli.app') as mock_app, \
+             patch('sys.stdout', new_callable=io.StringIO) as mock_stdout, \
+             pytest.raises(SystemExit) as exc_info:
+            
+            # Make app() raise the exception
+            mock_app.side_effect = mock_exception
+            main()
+        
+        # Check that it exits with code 1
+        assert exc_info.value.code == 1
+        
+        # Check the error message
+        output = mock_stdout.getvalue()
+        assert "❌ Wrong number of arguments provided" in output
+        assert "Usage: hca-smart-sync sync <atlas> [options]" in output

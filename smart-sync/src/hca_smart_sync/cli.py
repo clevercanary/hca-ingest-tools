@@ -289,6 +289,17 @@ def sync(
         # Handle no files found
         if result.get('no_files_found'):
             console.print("\n[yellow]No .h5ad files found in directory[/yellow]")
+            console.print("\n[green]Uploaded 0 file(s)[/green]")
+            console.print("[green]Sync completed successfully[/green]")
+            return
+        
+        # Handle files found but all up-to-date
+        if result.get('all_up_to_date'):
+            local_files = result.get('local_files', [])
+            file_count = len(local_files)
+            console.print(f"\n[green]Found {file_count} .h5ad file{'s' if file_count != 1 else ''} - all up to date[/green]")
+            console.print("\n[green]Uploaded 0 file(s)[/green]")
+            console.print("[green]Sync completed successfully[/green]")
             return
         
         # Step 4: Compare with S3
@@ -329,8 +340,11 @@ def sync(
                 if result.get('files_uploaded', 0) > 0:
                     _display_step(7, "Uploading manifest to S3")
         else:
-            # No files to upload
-            console.print(f"\nFound {len(result.get('local_files', []))} .h5ad files - all up to date")
+            # No files to upload - but only show "all up to date" if there are actually files
+            local_files = result.get('local_files', [])
+            if local_files:
+                console.print(f"\nFound {len(local_files)} .h5ad files - all up to date")
+            # If no local files, the no_files_found check above already handled it
         
         # Display results
         _display_results(result, dry_run)

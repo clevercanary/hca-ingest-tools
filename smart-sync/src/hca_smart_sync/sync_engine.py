@@ -72,14 +72,20 @@ class SmartSync:
         # Scan for .h5ad files in current directory
         local_files = self._scan_local_files(local_path)
         
-        if not local_files:
-            return {"files_uploaded": 0, "files_to_upload": [], "manifest_path": None, "no_files_found": True}
-        
         # Compare with S3 to determine what needs uploading
         files_to_upload = self._compare_with_s3(local_files, s3_path, force)
         
+        if not local_files:
+            return {"files_uploaded": 0, "files_to_upload": [], "manifest_path": None, "no_files_found": True}
+        
         if not files_to_upload:
-            return {"files_uploaded": 0, "files_to_upload": [], "manifest_path": None}
+            return {
+                "files_uploaded": 0, 
+                "files_to_upload": [], 
+                "manifest_path": None,
+                "local_files": local_files,  # Include local files so CLI can show count
+                "all_up_to_date": True  # Flag to indicate files exist but are up-to-date
+            }
         
         # Sort files alphabetically once for consistent ordering throughout workflow
         files_to_upload = sorted(files_to_upload, key=lambda x: x['filename'])

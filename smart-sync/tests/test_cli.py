@@ -359,7 +359,7 @@ class TestAWSCLIDependencyCheck:
             mock_resolve_local_path.return_value = "/test/path"
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "gut-v1", "--dry-run"])
+            result = runner.invoke(app, ["gut-v1", "--profile", "test"])
             
             # Debug output
             print(f"\nDEBUG: Exit code: {result.exit_code}")
@@ -371,3 +371,130 @@ class TestAWSCLIDependencyCheck:
             
             # This test is just for debugging - don't assert anything
             pass
+
+class TestSyncScenarios:
+    """Test sync command scenarios."""
+    
+    def test_sync_no_files_found(self):
+        """Test sync command when no .h5ad files are found."""
+        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
+             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+            
+            # Mock AWS CLI available
+            mock_check_aws_cli.return_value = True
+            
+            # Mock config and paths
+            mock_config = Mock()
+            mock_config.s3.bucket_name = "test-bucket"
+            mock_load_config.return_value = mock_config
+            mock_validate_config.return_value = None
+            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mock_resolve_local_path.return_value = "/test/path"
+            
+            # Mock sync engine to return no files found
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {
+                "files_uploaded": 0,
+                "files_to_upload": [],
+                "manifest_path": None,
+                "no_files_found": True
+            }
+            mock_init_sync.return_value = mock_sync_engine
+            
+            runner = CliRunner()
+            result = runner.invoke(app, ["gut-v1", "--profile", "test"])
+            
+            assert result.exit_code == 0
+            assert "No .h5ad files found in directory" in result.output
+            assert "Uploaded 0 file(s)" in result.output
+            assert "Sync completed successfully" in result.output
+
+    def test_sync_all_files_up_to_date(self):
+        """Test sync command when files exist but are all up to date."""
+        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
+             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+            
+            # Mock AWS CLI available
+            mock_check_aws_cli.return_value = True
+            
+            # Mock config and paths
+            mock_config = Mock()
+            mock_config.s3.bucket_name = "test-bucket"
+            mock_load_config.return_value = mock_config
+            mock_validate_config.return_value = None
+            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mock_resolve_local_path.return_value = "/test/path"
+            
+            # Mock sync engine to return files found but all up to date
+            mock_local_files = [
+                {"filename": "test1.h5ad", "size": 100},
+                {"filename": "test2.h5ad", "size": 200},
+                {"filename": "test3.h5ad", "size": 150}
+            ]
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {
+                "files_uploaded": 0,
+                "files_to_upload": [],
+                "manifest_path": None,
+                "local_files": mock_local_files,
+                "all_up_to_date": True
+            }
+            mock_init_sync.return_value = mock_sync_engine
+            
+            runner = CliRunner()
+            result = runner.invoke(app, ["gut-v1", "--profile", "test"])
+            
+            assert result.exit_code == 0
+            assert "Found 3 .h5ad files - all up to date" in result.output
+            assert "Uploaded 0 file(s)" in result.output
+            assert "Sync completed successfully" in result.output
+
+    def test_sync_single_file_up_to_date(self):
+        """Test sync command when single file exists but is up to date (singular message)."""
+        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
+             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+            
+            # Mock AWS CLI available
+            mock_check_aws_cli.return_value = True
+            
+            # Mock config and paths
+            mock_config = Mock()
+            mock_config.s3.bucket_name = "test-bucket"
+            mock_load_config.return_value = mock_config
+            mock_validate_config.return_value = None
+            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mock_resolve_local_path.return_value = "/test/path"
+            
+            # Mock sync engine to return single file up to date
+            mock_local_files = [
+                {"filename": "test1.h5ad", "size": 100}
+            ]
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {
+                "files_uploaded": 0,
+                "files_to_upload": [],
+                "manifest_path": None,
+                "local_files": mock_local_files,
+                "all_up_to_date": True
+            }
+            mock_init_sync.return_value = mock_sync_engine
+            
+            runner = CliRunner()
+            result = runner.invoke(app, ["gut-v1", "--profile", "test"])
+            
+            assert result.exit_code == 0
+            assert "Found 1 .h5ad file - all up to date" in result.output  # Singular "file"
+            assert "Uploaded 0 file(s)" in result.output
+            assert "Sync completed successfully" in result.output

@@ -197,15 +197,8 @@ class SmartSync:
             s3_url = f"s3://{bucket}/{s3_key}"
             
             # Build AWS CLI command
-            cmd = [
-                "aws", "s3", "cp",
-                str(file_info['local_path']),
-                s3_url,
-                "--metadata", f"source-sha256={file_info['checksum']}",
-            ]
-            
-            if self.config.aws.profile:
-                cmd.extend(["--profile", self.config.aws.profile])
+            cmd = self._build_aws_cli_command("cp", str(file_info['local_path']), s3_url, 
+                                              metadata={"source-sha256": file_info['checksum']})
             
             # Execute upload using reusable method
             self._run_aws_cli_command(cmd, f"upload {file_info['filename']}")
@@ -249,12 +242,7 @@ class SmartSync:
         manifest_prefix = "/".join(prefix.rstrip('/').split('/')[:-1] + ['manifests'])
         manifest_s3_url = f"s3://{bucket}/{manifest_prefix}/{manifest_path.split('/')[-1]}"
         
-        cmd = [
-            "aws", "s3", "cp",
-            manifest_path,
-            manifest_s3_url,
-            "--profile", self.config.aws.profile
-        ]
+        cmd = self._build_aws_cli_command("cp", manifest_path, manifest_s3_url)
         
         # Execute upload using reusable method
         manifest_filename = manifest_path.split('/')[-1]
@@ -271,6 +259,32 @@ class SmartSync:
         
         return bucket, prefix
 
+    def _build_aws_cli_command(self, operation: str, source: str, destination: str, 
+                              metadata: Optional[Dict[str, str]] = None) -> List[str]:
+        """Build AWS CLI command with consistent profile handling.
+        
+        Args:
+            operation: AWS CLI operation (e.g., 'cp', 'sync')
+            source: Source path (local file or S3 URL)
+            destination: Destination path (local file or S3 URL)
+            metadata: Optional metadata dict to add as --metadata key=value pairs
+            
+        Returns:
+            List of command arguments ready for subprocess.run
+        """
+        cmd = ["aws", "s3", operation, source, destination]
+        
+        # Add metadata if provided
+        if metadata:
+            for key, value in metadata.items():
+                cmd.extend(["--metadata", f"{key}={value}"])
+        
+        # Add profile if configured
+        if self.config.aws.profile:
+            cmd.extend(["--profile", self.config.aws.profile])
+        
+        return cmd
+    
     def _run_aws_cli_command(self, cmd: List[str], operation_description: str) -> None:
         """Run AWS CLI command with consistent error handling and progress display.
         

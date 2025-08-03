@@ -208,8 +208,8 @@ class SmartSync:
                 if self.config.aws.profile:
                     cmd.extend(["--profile", self.config.aws.profile])
                 
-                # Execute upload
-                result = subprocess.run(cmd, check=True)
+                # Execute upload with output capture for better error handling
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
                 
                 uploaded_files.append(file_info)
                 
@@ -218,7 +218,29 @@ class SmartSync:
                 self.console.print()  # Add blank line between uploads
                 
             except subprocess.CalledProcessError as e:
-                raise
+                # Enhance the error with detailed AWS CLI output, but preserve original exception type
+                error_details = [f"Failed to upload {file_info['filename']}"]
+                
+                if e.stderr:
+                    error_details.append(f"AWS CLI Error: {e.stderr.strip()}")
+                if e.stdout:
+                    error_details.append(f"AWS CLI Output: {e.stdout.strip()}")
+                    
+                error_details.extend([
+                    f"Command: {' '.join(cmd)}",
+                    f"Exit code: {e.returncode}"
+                ])
+                
+                error_msg = "\n".join(error_details)
+                self.console.print(f"[red]❌ {error_msg}[/red]")
+                
+                # Re-raise the original exception type with enhanced message
+                raise subprocess.CalledProcessError(
+                    e.returncode, 
+                    e.cmd, 
+                    output=e.stdout, 
+                    stderr=error_msg  # Enhanced error message in stderr
+                ) from e
         
         return uploaded_files
     
@@ -264,7 +286,17 @@ class SmartSync:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             
         except subprocess.CalledProcessError as e:
-            raise
+            # Provide detailed error information from AWS CLI
+            error_msg = f"Failed to upload manifest"
+            if e.stderr:
+                error_msg += f"\nAWS CLI Error: {e.stderr.strip()}"
+            if e.stdout:
+                error_msg += f"\nAWS CLI Output: {e.stdout.strip()}"
+            error_msg += f"\nCommand: {' '.join(cmd)}"
+            error_msg += f"\nExit code: {e.returncode}"
+            
+            self.console.print(f"[red]❌ {error_msg}[/red]")
+            raise RuntimeError(error_msg) from e
     
     def _parse_s3_path(self, s3_path: str) -> Tuple[str, str]:
         """Parse S3 path into bucket and prefix."""

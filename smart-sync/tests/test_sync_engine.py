@@ -1,8 +1,9 @@
 """Tests for sync engine functionality."""
 
 import tempfile
+import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 import pytest
 
 from hca_smart_sync.config import Config, AWSConfig, S3Config, ManifestConfig
@@ -117,3 +118,135 @@ class TestSmartSync:
         # Reset should clear the client
         sync._reset_aws_clients()
         assert sync._s3_client is None
+
+
+class TestSubprocessErrorHandling:
+    """Test enhanced subprocess error handling in sync engine."""
+    
+    def setup_method(self):
+        """Set up test configuration."""
+        self.config = Config(
+            aws=AWSConfig(
+                profile="test-profile",
+                region="us-east-1"
+            ),
+            s3=S3Config(
+                bucket="test-bucket",
+                prefix="test-atlas/source-datasets"
+            ),
+            manifest=ManifestConfig(
+                filename_template="manifest-{timestamp}.json"
+            )
+        )
+    
+    @patch('subprocess.run')
+    def test_upload_files_subprocess_error_with_stderr(self, mock_run):
+        """Test that subprocess errors with stderr are properly captured and re-raised."""
+        # Mock a CalledProcessError with stderr output
+        error = subprocess.CalledProcessError(
+            returncode=1,
+            cmd=['aws', 's3', 'cp', 'test.h5ad', 's3://bucket/path/'],
+            output="some stdout",
+            stderr="AccessDenied: Access denied to S3 bucket"
+        )
+        mock_run.side_effect = error
+        
+        # Create mock console to capture output
+        mock_console = Mock()
+        sync = SmartSync(self.config, console=mock_console)
+        
+        files_to_upload = [
+            {
+                'filename': 'test.h5ad',
+                'local_path': '/path/test.h5ad',
+                'checksum': 'abc123'
+            }
+        ]
+        
+        # Should re-raise CalledProcessError (not RuntimeError)
+        with pytest.raises(subprocess.CalledProcessError) as exc_info:
+            sync._upload_files(files_to_upload, "s3://test-bucket/test-atlas/source-datasets/")
+        
+        # Verify the re-raised exception has enhanced error message
+        raised_exception = exc_info.value
+        assert raised_exception.returncode == 1
+        assert "Failed to upload test.h5ad" in raised_exception.stderr
+        assert "AWS CLI Error: AccessDenied: Access denied to S3 bucket" in raised_exception.stderr
+        assert "Exit code: 1" in raised_exception.stderr
+        
+        # Verify console output was called with error message
+        mock_console.print.assert_called()
+        console_call_args = mock_console.print.call_args[0][0]
+        assert "[red]❌" in console_call_args
+        assert "Failed to upload test.h5ad" in console_call_args
+    
+    @patch('subprocess.run')
+    def test_upload_files_subprocess_error_with_stdout_and_stderr(self, mock_run):
+        """Test subprocess error handling with both stdout and stderr."""
+        error = subprocess.CalledProcessError(
+            returncode=2,
+            cmd=['aws', 's3', 'cp', 'data.h5ad', 's3://bucket/path/'],
+            output="upload progress info",
+            stderr="InvalidArgument: Invalid metadata format"
+        )
+        mock_run.side_effect = error
+        
+        mock_console = Mock()
+        sync = SmartSync(self.config, console=mock_console)
+        
+        files_to_upload = [
+            {
+                'filename': 'data.h5ad',
+                'local_path': '/path/data.h5ad',
+                'checksum': 'def456'
+            }
+        ]
+        
+        with pytest.raises(subprocess.CalledProcessError) as exc_info:
+            sync._upload_files(files_to_upload, "s3://test-bucket/test-atlas/source-datasets/")
+        
+        # Verify enhanced error message includes both stdout and stderr
+        raised_exception = exc_info.value
+        assert "AWS CLI Output: upload progress info" in raised_exception.stderr
+        assert "AWS CLI Error: InvalidArgument: Invalid metadata format" in raised_exception.stderr
+        assert "Exit code: 2" in raised_exception.stderr
+    
+    @patch('subprocess.run')
+    def test_upload_files_success_with_capture_output(self, mock_run):
+        """Test that successful uploads work with capture_output=True."""
+        # Mock successful subprocess run
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "upload: test.h5ad to s3://bucket/path/test.h5ad"
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+        
+        mock_console = Mock()
+        sync = SmartSync(self.config, console=mock_console)
+        
+        files_to_upload = [
+            {
+                'filename': 'test.h5ad',
+                'local_path': '/path/test.h5ad',
+                'checksum': 'abc123'
+            }
+        ]
+        
+        # Should complete successfully
+        result = sync._upload_files(files_to_upload, "s3://test-bucket/test-atlas/source-datasets/")
+        
+        # Verify subprocess.run was called with capture_output=True
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        assert call_args[1]['capture_output'] is True
+        assert call_args[1]['text'] is True
+        assert call_args[1]['check'] is True
+        
+        # Verify success message was printed
+        success_calls = [call for call in mock_console.print.call_args_list 
+                        if 'Successfully uploaded' in str(call)]
+        assert len(success_calls) > 0
+        
+        # Verify file was added to uploaded_files
+        assert len(result) == 1
+        assert result[0]['filename'] == 'test.h5ad'

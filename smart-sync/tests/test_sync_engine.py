@@ -140,8 +140,8 @@ class TestSubprocessErrorHandling:
         )
     
     @patch('subprocess.run')
-    def test_upload_files_subprocess_error_with_stderr(self, mock_run):
-        """Test that subprocess errors with stderr are properly captured and re-raised."""
+    def test_run_aws_cli_command_error_with_stderr(self, mock_run):
+        """Test that AWS CLI command errors with stderr are properly captured and re-raised."""
         # Mock a CalledProcessError with stderr output
         error = subprocess.CalledProcessError(
             returncode=1,
@@ -155,17 +155,11 @@ class TestSubprocessErrorHandling:
         mock_console = Mock()
         sync = SmartSync(self.config, console=mock_console)
         
-        files_to_upload = [
-            {
-                'filename': 'test.h5ad',
-                'local_path': '/path/test.h5ad',
-                'checksum': 'abc123'
-            }
-        ]
+        cmd = ['aws', 's3', 'cp', 'test.h5ad', 's3://bucket/path/']
         
         # Should re-raise CalledProcessError (not RuntimeError)
         with pytest.raises(subprocess.CalledProcessError) as exc_info:
-            sync._upload_files(files_to_upload, "s3://test-bucket/test-atlas/source-datasets/")
+            sync._run_aws_cli_command(cmd, "upload test.h5ad")
         
         # Verify the re-raised exception has enhanced error message
         raised_exception = exc_info.value
@@ -181,43 +175,37 @@ class TestSubprocessErrorHandling:
         assert "Failed to upload test.h5ad" in console_call_args
     
     @patch('subprocess.run')
-    def test_upload_files_subprocess_error_with_stdout_and_stderr(self, mock_run):
-        """Test subprocess error handling with both stdout and stderr."""
-        error = subprocess.CalledProcessError(
-            returncode=2,
-            cmd=['aws', 's3', 'cp', 'data.h5ad', 's3://bucket/path/'],
-            output="upload progress info",
-            stderr="InvalidArgument: Invalid metadata format"
-        )
-        mock_run.side_effect = error
+    def test_run_aws_cli_command_success_with_stderr_capture(self, mock_run):
+        """Test that successful AWS CLI commands work with stderr capture only."""
+        # Mock successful subprocess run
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
         
         mock_console = Mock()
         sync = SmartSync(self.config, console=mock_console)
         
-        files_to_upload = [
-            {
-                'filename': 'data.h5ad',
-                'local_path': '/path/data.h5ad',
-                'checksum': 'def456'
-            }
-        ]
+        cmd = ['aws', 's3', 'cp', 'test.h5ad', 's3://bucket/path/']
         
-        with pytest.raises(subprocess.CalledProcessError) as exc_info:
-            sync._upload_files(files_to_upload, "s3://test-bucket/test-atlas/source-datasets/")
+        # Should complete successfully
+        sync._run_aws_cli_command(cmd, "upload test.h5ad")
         
-        # Verify enhanced error message includes both stdout and stderr
-        raised_exception = exc_info.value
-        assert "AWS CLI Output: upload progress info" in raised_exception.stderr
-        assert "AWS CLI Error: InvalidArgument: Invalid metadata format" in raised_exception.stderr
-        assert "Exit code: 2" in raised_exception.stderr
+        # Verify subprocess.run was called with stderr=PIPE only
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args
+        assert call_args[1]['stderr'] == subprocess.PIPE
+        assert call_args[1]['text'] is True
+        assert call_args[1]['check'] is True
+        # stdout should NOT be captured (not in call_args)
+        assert 'stdout' not in call_args[1] or call_args[1].get('stdout') is None
     
     @patch('subprocess.run')
-    def test_upload_files_success_with_capture_output(self, mock_run):
-        """Test that successful uploads work with capture_output=True."""
+    def test_upload_files_uses_reusable_method(self, mock_run):
+        """Test that _upload_files uses the new reusable _run_aws_cli_command method."""
         # Mock successful subprocess run
         mock_result = Mock()
         mock_result.returncode = 0
-        mock_result.stdout = "upload: test.h5ad to s3://bucket/path/test.h5ad"
         mock_result.stderr = ""
         mock_run.return_value = mock_result
         
@@ -235,12 +223,8 @@ class TestSubprocessErrorHandling:
         # Should complete successfully
         result = sync._upload_files(files_to_upload, "s3://test-bucket/test-atlas/source-datasets/")
         
-        # Verify subprocess.run was called with capture_output=True
+        # Verify subprocess.run was called once (by the reusable method)
         mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        assert call_args[1]['capture_output'] is True
-        assert call_args[1]['text'] is True
-        assert call_args[1]['check'] is True
         
         # Verify success message was printed
         success_calls = [call for call in mock_console.print.call_args_list 
@@ -250,3 +234,41 @@ class TestSubprocessErrorHandling:
         # Verify file was added to uploaded_files
         assert len(result) == 1
         assert result[0]['filename'] == 'test.h5ad'
+    
+    @patch('subprocess.run')
+    def test_manifest_upload_uses_reusable_method(self, mock_run):
+        """Test that manifest upload uses the new reusable _run_aws_cli_command method."""
+        # Mock successful subprocess run
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+        
+        mock_console = Mock()
+        sync = SmartSync(self.config, console=mock_console)
+        
+        # Test the manifest upload method
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            f.write('{"test": "manifest"}')
+            manifest_path = f.name
+        
+        try:
+            sync._upload_manifest_to_s3(
+                manifest_path, 
+                "s3://test-bucket/test-atlas/source-datasets/"
+            )
+            
+            # Verify subprocess.run was called once (by the reusable method)
+            mock_run.assert_called_once()
+            
+            # Verify the command includes the manifest path and manifests folder
+            call_args = mock_run.call_args[0][0]  # First positional arg (cmd)
+            assert 'aws' in call_args
+            assert 's3' in call_args
+            assert 'cp' in call_args
+            assert manifest_path in call_args
+            assert 'manifests' in ' '.join(call_args)
+            
+        finally:
+            # Clean up temp file
+            Path(manifest_path).unlink(missing_ok=True)

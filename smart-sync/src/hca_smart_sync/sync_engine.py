@@ -193,54 +193,28 @@ class SmartSync:
         bucket, prefix = self._parse_s3_path(s3_path)
         
         for file_info in files_to_upload:
-            try:
-                s3_key = f"{prefix.rstrip('/')}/{file_info['filename']}"
-                s3_url = f"s3://{bucket}/{s3_key}"
-                
-                # Build AWS CLI command
-                cmd = [
-                    "aws", "s3", "cp",
-                    str(file_info['local_path']),
-                    s3_url,
-                    "--metadata", f"source-sha256={file_info['checksum']}",
-                ]
-                
-                if self.config.aws.profile:
-                    cmd.extend(["--profile", self.config.aws.profile])
-                
-                # Execute upload with output capture for better error handling
-                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-                
-                uploaded_files.append(file_info)
-                
-                # Show success message after each upload
-                self.console.print(f"[green]Successfully uploaded: {file_info['filename']}[/green]")
-                self.console.print()  # Add blank line between uploads
-                
-            except subprocess.CalledProcessError as e:
-                # Enhance the error with detailed AWS CLI output, but preserve original exception type
-                error_details = [f"Failed to upload {file_info['filename']}"]
-                
-                if e.stderr:
-                    error_details.append(f"AWS CLI Error: {e.stderr.strip()}")
-                if e.stdout:
-                    error_details.append(f"AWS CLI Output: {e.stdout.strip()}")
-                    
-                error_details.extend([
-                    f"Command: {' '.join(cmd)}",
-                    f"Exit code: {e.returncode}"
-                ])
-                
-                error_msg = "\n".join(error_details)
-                self.console.print(f"[red]❌ {error_msg}[/red]")
-                
-                # Re-raise the original exception type with enhanced message
-                raise subprocess.CalledProcessError(
-                    e.returncode, 
-                    e.cmd, 
-                    output=e.stdout, 
-                    stderr=error_msg  # Enhanced error message in stderr
-                ) from e
+            s3_key = f"{prefix.rstrip('/')}/{file_info['filename']}"
+            s3_url = f"s3://{bucket}/{s3_key}"
+            
+            # Build AWS CLI command
+            cmd = [
+                "aws", "s3", "cp",
+                str(file_info['local_path']),
+                s3_url,
+                "--metadata", f"source-sha256={file_info['checksum']}",
+            ]
+            
+            if self.config.aws.profile:
+                cmd.extend(["--profile", self.config.aws.profile])
+            
+            # Execute upload using reusable method
+            self._run_aws_cli_command(cmd, f"upload {file_info['filename']}")
+            
+            uploaded_files.append(file_info)
+            
+            # Show success message after each upload
+            self.console.print(f"[green]Successfully uploaded: {file_info['filename']}[/green]")
+            self.console.print()  # Add blank line between uploads
         
         return uploaded_files
     
@@ -275,28 +249,16 @@ class SmartSync:
         manifest_prefix = "/".join(prefix.rstrip('/').split('/')[:-1] + ['manifests'])
         manifest_s3_url = f"s3://{bucket}/{manifest_prefix}/{manifest_path.split('/')[-1]}"
         
-        try:
-            cmd = [
-                "aws", "s3", "cp",
-                manifest_path,
-                manifest_s3_url,
-                "--profile", self.config.aws.profile
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            
-        except subprocess.CalledProcessError as e:
-            # Provide detailed error information from AWS CLI
-            error_msg = f"Failed to upload manifest"
-            if e.stderr:
-                error_msg += f"\nAWS CLI Error: {e.stderr.strip()}"
-            if e.stdout:
-                error_msg += f"\nAWS CLI Output: {e.stdout.strip()}"
-            error_msg += f"\nCommand: {' '.join(cmd)}"
-            error_msg += f"\nExit code: {e.returncode}"
-            
-            self.console.print(f"[red]❌ {error_msg}[/red]")
-            raise RuntimeError(error_msg) from e
+        cmd = [
+            "aws", "s3", "cp",
+            manifest_path,
+            manifest_s3_url,
+            "--profile", self.config.aws.profile
+        ]
+        
+        # Execute upload using reusable method
+        manifest_filename = manifest_path.split('/')[-1]
+        self._run_aws_cli_command(cmd, f"upload manifest {manifest_filename}")
     
     def _parse_s3_path(self, s3_path: str) -> Tuple[str, str]:
         """Parse S3 path into bucket and prefix."""
@@ -308,6 +270,45 @@ class SmartSync:
         prefix = path_parts[1] if len(path_parts) > 1 else ""
         
         return bucket, prefix
+
+    def _run_aws_cli_command(self, cmd: List[str], operation_description: str) -> None:
+        """Run AWS CLI command with consistent error handling and progress display.
+        
+        Args:
+            cmd: AWS CLI command as list of strings
+            operation_description: Description of the operation for error messages (e.g., "upload file.h5ad")
+        """
+        try:
+            # Execute command - capture stderr for errors but let stdout show progress
+            result = subprocess.run(
+                cmd, 
+                check=True, 
+                stderr=subprocess.PIPE,  # Capture stderr for error handling
+                text=True                # Convert bytes to strings
+                # stdout flows to terminal for progress display
+            )
+        except subprocess.CalledProcessError as e:
+            # Enhance the error with detailed AWS CLI output
+            error_details = [f"Failed to {operation_description}"]
+            
+            if e.stderr:
+                error_details.append(f"AWS CLI Error: {e.stderr.strip()}")
+            
+            error_details.extend([
+                f"Command: {' '.join(cmd)}",
+                f"Exit code: {e.returncode}"
+            ])
+            
+            error_msg = "\n".join(error_details)
+            self.console.print(f"[red]❌ {error_msg}[/red]")
+            
+            # Re-raise the original exception type with enhanced message
+            raise subprocess.CalledProcessError(
+                e.returncode, 
+                e.cmd, 
+                output=e.stdout, 
+                stderr=error_msg  # Enhanced error message in stderr
+            ) from e
     
     def _validate_s3_access(self, s3_path: str) -> bool:
         """

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hca-smart-sync"
-version = "1.0.0"
+version = "0.1.0"
 description = "Intelligent S3 synchronization for HCA Atlas data"
 authors = ["HCA Team <team@example.com>"]
 readme = "README.md"

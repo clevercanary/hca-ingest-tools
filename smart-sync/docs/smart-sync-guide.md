@@ -1,13 +1,14 @@
-# HCA Smart-Sync User Guide
+# HCA S3 Sync User Guide
 
 ## Overview
 
-HCA Smart-Sync is an intelligent S3 synchronization tool designed specifically for uploading biological data (.h5ad files) to Human Cell Atlas infrastructure. It provides:
+HCA S3 Sync is an S3 synchronization tool for uploading biological data (.h5ad files) to Human Cell Atlas infrastructure. It provides:
 
-- **Smart comparison** using SHA256 checksums (not file size)
-- **Manifest-driven uploads** with transparent submission workflow
-- **Research-grade integrity** with end-to-end verification
+- **Checksum-based comparison** using SHA256 (not file size)
+- **Manifest-driven uploads** with submission workflow
+- **Data integrity verification** with end-to-end checksums
 - **AWS CLI integration** for reliable multipart uploads
+- **AWS Transfer Acceleration** for faster international uploads
 - **Interactive confirmation** with detailed upload plans
 
 ## Installation
@@ -47,54 +48,51 @@ export AWS_DEFAULT_REGION=us-east-1
 # Navigate to your data directory
 cd /path/to/your/h5ad/files
 
-# Run smart-sync
-hca-smart-sync sync gut-v1 your-bucket-name source-datasets --profile your-profile-name
-```
+# Run sync with required arguments
+hca-smart-sync gut-v1 --profile your-profile-name --environment prod
 
-### 3. Specify Custom Local Path
-```bash
-# Upload from a different directory
-hca-smart-sync sync gut-v1 your-bucket-name source-datasets \
-  --local-path /path/to/data \
-  --profile your-profile-name
+# Or specify a different directory
+hca-smart-sync gut-v1 --profile your-profile-name --environment dev --local-path /data/gut/
 ```
 
 ## Command Reference
 
 ### `hca-smart-sync sync`
 
-Upload .h5ad files to S3 with intelligent synchronization.
+Upload .h5ad files to S3 with checksum-based synchronization.
 
 ```bash
-hca-smart-sync sync ATLAS BUCKET FOLDER [OPTIONS]
+hca-smart-sync ATLAS [OPTIONS]
 ```
 
 **Arguments:**
-- `ATLAS`: Atlas name (e.g., `gut-v1`, `immune-v1`)
-- `BUCKET`: S3 bucket name
-- `FOLDER`: Target folder (`source-datasets` or `integrated-objects`)
+- `ATLAS`: Atlas name (e.g., `gut-v1`, `immune-v1`, `adipose-v1`)
 
-**Options:**
+**Required Options:**
+- `--profile NAME`: AWS profile to use (required)
+
+**Optional Arguments:**
+- `--environment ENV`: Target environment (`dev` or `prod`, default: `prod`)
 - `--local-path PATH`: Directory to scan for files (default: current directory)
-- `--profile NAME`: AWS profile to use
 - `--dry-run`: Show what would be uploaded without uploading
-- `--force`: Skip confirmation prompt
+- `--force`: Upload all files without confirmation
 
 **Examples:**
 ```bash
-# Basic upload
-hca-smart-sync sync gut-v1 hca-atlas-data source-datasets
+# Basic upload to production
+hca-smart-sync gut-v1 --profile my-profile
 
-# Dry run to preview
-hca-smart-sync sync gut-v1 hca-atlas-data source-datasets --dry-run
+# Upload to development environment
+hca-smart-sync gut-v1 --profile my-profile --environment dev
+
+# Dry run to preview changes
+hca-smart-sync gut-v1 --profile my-profile --dry-run
 
 # Upload from specific directory
-hca-smart-sync sync immune-v1 hca-atlas-data source-datasets \
-  --local-path /data/immune/batch1 \
-  --profile production
+hca-smart-sync immune-v1 --profile my-profile --local-path /data/immune/batch1
 
 # Force upload without confirmation
-hca-smart-sync sync adipose-v1 hca-atlas-data integrated-objects --force
+hca-smart-sync adipose-v1 --profile my-profile --force
 ```
 
 ### `hca-smart-sync config-show`

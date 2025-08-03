@@ -337,40 +337,6 @@ class TestAWSCLIDependencyCheck:
         assert "winget install Amazon.AWSCLI" in output
         assert "aws configure" in output
 
-    def test_debug_sync_command_output(self):
-        """Debug test to see what's actually happening in sync command."""
-        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
-             patch('hca_smart_sync.cli._display_banner') as mock_display_banner, \
-             patch('hca_smart_sync.cli._display_step') as mock_display_step:
-            
-            # Mock AWS CLI not available
-            mock_check_aws_cli.return_value = False
-            
-            # Mock config and paths
-            mock_config = Mock()
-            mock_config.s3.bucket_name = "test-bucket"
-            mock_load_config.return_value = mock_config
-            mock_validate_config.return_value = None
-            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
-            mock_resolve_local_path.return_value = "/test/path"
-            
-            runner = CliRunner()
-            result = runner.invoke(app, ["gut-v1", "--profile", "test"])
-            
-            # Debug output
-            print(f"\nDEBUG: Exit code: {result.exit_code}")
-            print(f"DEBUG: Output: {result.output}")
-            print(f"DEBUG: Exception: {result.exception}")
-            if result.exception:
-                import traceback
-                print(f"DEBUG: Traceback: {''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))}")
-            
-            # This test is just for debugging - don't assert anything
-            pass
 
 class TestSyncScenarios:
     """Test sync command scenarios."""

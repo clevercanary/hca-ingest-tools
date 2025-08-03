@@ -82,8 +82,6 @@ class TestChecksumCalculator:
             assert len(actual_sha256) == 64
             assert all(c in '0123456789abcdef' for c in actual_sha256.lower())
             
-            print(f" Large file test passed: {len(large_content)} bytes, hash: {actual_sha256[:16]}...")
-            
         finally:
             # Clean up fixture file
             if fixture_path.exists():
@@ -126,8 +124,6 @@ class TestChecksumCalculator:
                 # Verify it's a valid SHA256 format
                 assert len(actual_sha256) == 64
                 assert all(c in '0123456789abcdef' for c in actual_sha256.lower())
-                
-                print(f"✅ Boundary test passed: {test_name} ({file_size} bytes), hash: {actual_sha256[:16]}...")
                 
             finally:
                 # Clean up fixture file
@@ -177,11 +173,6 @@ class TestChecksumCalculator:
             # Verify it's a valid SHA256 format
             assert len(our_sha256) == 64
             assert all(c in '0123456789abcdef' for c in our_sha256.lower())
-            
-            print(f"✅ Cross-validation passed: Our hash matches shasum")
-            print(f"   Content: {len(cross_val_content)} bytes")
-            print(f"   Hash: {our_sha256[:16]}...")
-            print(f"   External tool confirmed: ✓")
             
         except subprocess.CalledProcessError as e:
             pytest.fail(f"shasum command failed: {e}")

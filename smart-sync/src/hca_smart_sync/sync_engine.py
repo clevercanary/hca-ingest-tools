@@ -291,6 +291,11 @@ class SmartSync:
         if self.config.aws.profile:
             cmd.extend(["--profile", self.config.aws.profile])
         
+        # Add Transfer Acceleration endpoint for faster international uploads
+        # Use accelerated endpoint for all S3 operations
+        if source.startswith('s3://') or destination.startswith('s3://'):
+            cmd.extend(["--endpoint-url", "https://s3-accelerate.amazonaws.com"])
+        
         return cmd
     
     def _run_aws_cli_command(self, cmd: List[str], operation_description: str) -> None:
@@ -301,13 +306,13 @@ class SmartSync:
             operation_description: Description of the operation for error messages (e.g., "upload file.h5ad")
         """
         try:
-            # Execute command - capture stderr for errors but let stdout show progress
+            # Run with stderr capture only to preserve AWS CLI progress on stdout
             result = subprocess.run(
-                cmd, 
-                check=True, 
+                cmd,
+                capture_output=False,  # Let stdout (progress) show naturally
                 stderr=subprocess.PIPE,  # Capture stderr for error handling
-                text=True                # Convert bytes to strings
-                # stdout flows to terminal for progress display
+                text=True,
+                check=True
             )
         except subprocess.CalledProcessError as e:
             # Enhance the error with detailed AWS CLI output

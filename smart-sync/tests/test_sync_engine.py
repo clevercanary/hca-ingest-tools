@@ -359,3 +359,169 @@ class TestSubprocessErrorHandling:
         finally:
             # Clean up temp file
             Path(manifest_path).unlink(missing_ok=True)
+
+
+class TestTransferAcceleration:
+    """Test Transfer Acceleration command generation."""
+    
+    def setup_method(self):
+        """Set up test configuration."""
+        self.config = Config(
+            aws=AWSConfig(
+                profile="test-profile",
+                region="us-east-1"
+            ),
+            s3=S3Config(
+                bucket="test-bucket",
+                prefix="test-atlas/source-datasets"
+            ),
+            manifest=ManifestConfig(
+                filename_template="manifest-{timestamp}.json"
+            )
+        )
+    
+    def test_build_aws_cli_command_upload_with_transfer_acceleration(self):
+        """Test that S3 upload commands include Transfer Acceleration endpoint."""
+        sync = SmartSync(self.config)
+        
+        # Test local file to S3 upload
+        cmd = sync._build_aws_cli_command(
+            operation="cp",
+            source="/local/path/test.h5ad",
+            destination="s3://test-bucket/test-atlas/source-datasets/test.h5ad",
+            metadata={"source-sha256": "abc123def456"}
+        )
+        
+        # Verify Transfer Acceleration endpoint is included
+        assert "--endpoint-url" in cmd
+        endpoint_index = cmd.index("--endpoint-url")
+        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"
+        
+        # Verify other expected components
+        assert "aws" in cmd
+        assert "s3" in cmd
+        assert "cp" in cmd
+        assert "/local/path/test.h5ad" in cmd
+        assert "s3://test-bucket/test-atlas/source-datasets/test.h5ad" in cmd
+        assert "--metadata" in cmd
+        assert "source-sha256=abc123def456" in cmd
+        assert "--profile" in cmd
+        assert "test-profile" in cmd
+    
+    def test_build_aws_cli_command_download_with_transfer_acceleration(self):
+        """Test that S3 download commands include Transfer Acceleration endpoint."""
+        sync = SmartSync(self.config)
+        
+        # Test S3 to local file download
+        cmd = sync._build_aws_cli_command(
+            operation="cp",
+            source="s3://test-bucket/test-atlas/source-datasets/test.h5ad",
+            destination="/local/path/test.h5ad"
+        )
+        
+        # Verify Transfer Acceleration endpoint is included
+        assert "--endpoint-url" in cmd
+        endpoint_index = cmd.index("--endpoint-url")
+        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"
+        
+        # Verify other expected components
+        assert "aws" in cmd
+        assert "s3" in cmd
+        assert "cp" in cmd
+        assert "s3://test-bucket/test-atlas/source-datasets/test.h5ad" in cmd
+        assert "/local/path/test.h5ad" in cmd
+        assert "--profile" in cmd
+        assert "test-profile" in cmd
+    
+    def test_build_aws_cli_command_s3_to_s3_with_transfer_acceleration(self):
+        """Test that S3 to S3 copy commands include Transfer Acceleration endpoint."""
+        sync = SmartSync(self.config)
+        
+        # Test S3 to S3 copy
+        cmd = sync._build_aws_cli_command(
+            operation="cp",
+            source="s3://source-bucket/path/test.h5ad",
+            destination="s3://dest-bucket/path/test.h5ad"
+        )
+        
+        # Verify Transfer Acceleration endpoint is included
+        assert "--endpoint-url" in cmd
+        endpoint_index = cmd.index("--endpoint-url")
+        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"
+        
+        # Verify other expected components
+        assert "aws" in cmd
+        assert "s3" in cmd
+        assert "cp" in cmd
+        assert "s3://source-bucket/path/test.h5ad" in cmd
+        assert "s3://dest-bucket/path/test.h5ad" in cmd
+        assert "--profile" in cmd
+        assert "test-profile" in cmd
+    
+    def test_build_aws_cli_command_with_metadata_and_acceleration(self):
+        """Test that metadata and Transfer Acceleration work together correctly."""
+        sync = SmartSync(self.config)
+        
+        # Test with multiple metadata fields
+        cmd = sync._build_aws_cli_command(
+            operation="cp",
+            source="/local/path/test.h5ad",
+            destination="s3://test-bucket/test-atlas/source-datasets/test.h5ad",
+            metadata={
+                "source-sha256": "abc123def456",
+                "upload-tool": "hca-smart-sync",
+                "version": "1.0.0"
+            }
+        )
+        
+        # Verify Transfer Acceleration endpoint is included
+        assert "--endpoint-url" in cmd
+        endpoint_index = cmd.index("--endpoint-url")
+        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"
+        
+        # Verify metadata is properly formatted (each field gets its own --metadata flag)
+        assert "--metadata" in cmd
+        
+        # Count metadata occurrences (should be 3)
+        metadata_count = cmd.count("--metadata")
+        assert metadata_count == 3
+        
+        # Check that all metadata fields are present as separate arguments
+        cmd_str = " ".join(cmd)
+        assert "source-sha256=abc123def456" in cmd_str
+        assert "upload-tool=hca-smart-sync" in cmd_str
+        assert "version=1.0.0" in cmd_str
+        
+        # Verify command structure
+        assert "aws" in cmd
+        assert "s3" in cmd
+        assert "cp" in cmd
+        assert "--profile" in cmd
+        assert "test-profile" in cmd
+    
+    def test_build_aws_cli_command_order_consistency(self):
+        """Test that command arguments are in consistent order."""
+        sync = SmartSync(self.config)
+        
+        cmd = sync._build_aws_cli_command(
+            operation="cp",
+            source="/local/path/test.h5ad",
+            destination="s3://test-bucket/test-atlas/source-datasets/test.h5ad",
+            metadata={"source-sha256": "abc123"}
+        )
+        
+        # Verify basic command structure order
+        assert cmd[0] == "aws"
+        assert cmd[1] == "s3"
+        assert cmd[2] == "cp"
+        assert cmd[3] == "/local/path/test.h5ad"
+        assert cmd[4] == "s3://test-bucket/test-atlas/source-datasets/test.h5ad"
+        
+        # Verify that profile and endpoint-url are present (order may vary for flags)
+        assert "--profile" in cmd
+        assert "--endpoint-url" in cmd
+        assert "--metadata" in cmd
+        
+        # Verify endpoint URL value immediately follows the flag
+        endpoint_index = cmd.index("--endpoint-url")
+        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"

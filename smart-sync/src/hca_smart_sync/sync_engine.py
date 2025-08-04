@@ -179,11 +179,19 @@ class SmartSync:
                 # File doesn't exist in S3 - this is normal for new files
                 files_to_upload.append({**local_file, "reason": "new"})
             except Exception as e:
-                # Only show warnings for actual errors (not 404s which are handled above)
+                # Handle other ClientError exceptions (like 404)
                 error_code = getattr(e, 'response', {}).get('Error', {}).get('Code', 'Unknown')
-                if error_code not in ['NoSuchKey', '404']:
-                    # Treat any access error as "new" to be safe
+                
+                # If it's a 404 or NoSuchKey, treat as new file
+                if error_code in ['NoSuchKey', '404']:
                     files_to_upload.append({**local_file, "reason": "new"})
+                else:
+                    # For other errors, fail fast rather than assume upload is safe
+                    # This prevents issues like access denied, network errors, etc.
+                    raise RuntimeError(
+                        f"Failed to check S3 status for {local_file['filename']}: "
+                        f"{error_code} - {getattr(e, 'response', {}).get('Error', {}).get('Message', str(e))}"
+                    ) from e
         
         return files_to_upload
     

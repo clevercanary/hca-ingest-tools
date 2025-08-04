@@ -119,6 +119,93 @@ class TestSmartSync:
         sync._reset_aws_clients()
         assert sync._s3_client is None
 
+    @patch('boto3.Session')
+    def test_compare_with_s3_missing_files(self, mock_session):
+        """Test S3 comparison when files don't exist in S3 (404/NoSuchKey)."""
+        # Mock S3 client that raises NoSuchKey for head_object calls
+        mock_s3_client = Mock()
+        mock_session.return_value.client.return_value = mock_s3_client
+        
+        # Configure head_object to raise NoSuchKey exception
+        from botocore.exceptions import ClientError
+        mock_s3_client.exceptions.NoSuchKey = ClientError
+        mock_s3_client.head_object.side_effect = ClientError(
+            error_response={'Error': {'Code': 'NoSuchKey', 'Message': 'Not Found'}},
+            operation_name='HeadObject'
+        )
+        
+        sync = SmartSync(self.config)
+        
+        # Create mock local files
+        local_files = [
+            {
+                'filename': 'test1.h5ad',
+                'local_path': Path('/tmp/test1.h5ad'),
+                'size': 1024,
+                'checksum': 'abc123',
+                'modified': '2023-01-01T00:00:00Z'
+            },
+            {
+                'filename': 'test2.h5ad', 
+                'local_path': Path('/tmp/test2.h5ad'),
+                'size': 2048,
+                'checksum': 'def456',
+                'modified': '2023-01-01T00:00:00Z'
+            }
+        ]
+        
+        # Test comparison with missing S3 files
+        files_to_upload = sync._compare_with_s3(local_files, "s3://test-bucket/path/", force=False)
+        
+        # All files should be marked for upload as "new"
+        assert len(files_to_upload) == 2
+        assert files_to_upload[0]['filename'] == 'test1.h5ad'
+        assert files_to_upload[0]['reason'] == 'new'
+        assert files_to_upload[1]['filename'] == 'test2.h5ad'
+        assert files_to_upload[1]['reason'] == 'new'
+        
+        # Verify head_object was called for each file
+        assert mock_s3_client.head_object.call_count == 2
+
+    @patch('boto3.Session')
+    def test_compare_with_s3_404_client_error(self, mock_session):
+        """Test S3 comparison when files return 404 ClientError."""
+        # Mock S3 client that raises 404 ClientError for head_object calls
+        mock_s3_client = Mock()
+        mock_session.return_value.client.return_value = mock_s3_client
+        
+        # Configure head_object to raise 404 ClientError (different from NoSuchKey)
+        from botocore.exceptions import ClientError
+        mock_s3_client.exceptions.NoSuchKey = ClientError
+        mock_s3_client.head_object.side_effect = ClientError(
+            error_response={'Error': {'Code': '404', 'Message': 'Not Found'}},
+            operation_name='HeadObject'
+        )
+        
+        sync = SmartSync(self.config)
+        
+        # Create mock local file
+        local_files = [
+            {
+                'filename': 'missing.h5ad',
+                'local_path': Path('/tmp/missing.h5ad'),
+                'size': 1024,
+                'checksum': 'xyz789',
+                'modified': '2023-01-01T00:00:00Z'
+            }
+        ]
+        
+        # Test comparison with 404 error
+        files_to_upload = sync._compare_with_s3(local_files, "s3://test-bucket/path/", force=False)
+        
+        # File should be marked for upload as "new" (404 should be treated as missing)
+        assert len(files_to_upload) == 1
+        assert files_to_upload[0]['filename'] == 'missing.h5ad'
+        assert files_to_upload[0]['reason'] == 'new'
+        
+        # Verify head_object was called
+        mock_s3_client.head_object.assert_called_once()
+
 
 class TestSubprocessErrorHandling:
     """Test enhanced subprocess error handling in sync engine."""

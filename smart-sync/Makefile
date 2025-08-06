@@ -1,7 +1,7 @@
 # HCA Smart-Sync - Development Makefile
 # Convenience commands for smart-sync development
 
-.PHONY: help install test test-cov lint format clean dev cli status
+.PHONY: help install test test-cov lint format clean dev cli status build package
 
 help: ## Show this help message
 	@echo "HCA Smart-Sync - Development Commands"
@@ -53,7 +53,18 @@ clean: ## Clean build artifacts
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf .coverage coverage.xml htmlcov/
+	rm -rf dist/ build/
 	@echo "✅ Cleanup completed"
+
+# Build commands
+build: ## Build wheel and source distribution
+	@echo "🔨 Building distribution packages..."
+	poetry build
+	@echo "✅ Build completed - artifacts in dist/"
+	@ls -la dist/
+
+package: clean build ## Clean and build fresh distribution packages
+	@echo "📦 Fresh package build completed"
 
 # CLI commands
 cli: ## Run smart-sync CLI (pass args with ARGS="...")

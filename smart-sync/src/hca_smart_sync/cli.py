@@ -90,9 +90,9 @@ def format_status(status: str) -> str:
 # Banner display function
 def _display_banner(local_path: Path, s3_path: str, dry_run: bool = False) -> None:
     """Display the HCA Smart-Sync banner and configuration."""
-    console.print("\n[bold blue]" + "="*60 + "[/bold blue]")
-    console.print("[bold blue]║" + "HCA Smart-Sync Tool".center(58) + "║[/bold blue]")
-    console.print("[bold blue]" + "="*60 + "[/bold blue]")
+    console.print("\n[#4A90E2]" + "="*60 + "[/#4A90E2]")
+    console.print("[#4A90E2]║" + "HCA Smart-Sync Tool".center(58) + "║[/#4A90E2]")
+    console.print("[#4A90E2]" + "="*60 + "[/#4A90E2]")
     console.print()
     console.print(f"[bright_black]Local Path: {local_path}[/bright_black]")
     console.print(f"[bright_black]S3 Target: {s3_path}[/bright_black]")
@@ -103,7 +103,7 @@ def _display_banner(local_path: Path, s3_path: str, dry_run: bool = False) -> No
 
 def _display_step(step_number: int, description: str) -> None:
     """Display a numbered step in the sync process."""
-    console.print(f"[bold blue]Step {step_number}: {description}...[/bold blue]")
+    console.print(f"[#4A90E2]Step {step_number}: {description}...[/#4A90E2]")
 
 def _display_upload_plan(files_to_upload: List[Dict], s3_path: str, dry_run: bool) -> None:
     """Display the upload plan to the user."""

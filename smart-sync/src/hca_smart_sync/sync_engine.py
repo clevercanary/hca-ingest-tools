@@ -168,12 +168,18 @@ class SmartSync:
                 # Check if file exists in S3
                 response = self.s3_client.head_object(Bucket=bucket, Key=s3_key)
                 
-                # Compare checksums if metadata exists
+                # Compare both checksums and file size to ensure file is complete
+                # This prevents issues with interrupted uploads where metadata is set
+                # but file content is incomplete
                 s3_checksum = response.get('Metadata', {}).get('source-sha256')
-                if s3_checksum and s3_checksum == local_file['checksum']:
-                    continue  # File is identical, skip
+                s3_size = response.get('ContentLength', 0)
                 
-                # File exists but has different checksum or no checksum metadata
+                if (s3_checksum and s3_checksum == local_file['checksum'] and 
+                    s3_size == local_file['size']):
+                    continue  # File is identical and complete, skip
+                
+                # File exists but has different checksum, size, or missing metadata
+                # This catches interrupted uploads, corrupted files, etc.
                 files_to_upload.append({**local_file, "reason": "changed"})
                 
             except self.s3_client.exceptions.NoSuchKey:

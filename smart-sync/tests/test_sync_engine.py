@@ -207,6 +207,122 @@ class TestSmartSync:
         mock_s3_client.head_object.assert_called_once()
 
 
+    @patch('boto3.Session')
+    def test_compare_with_s3_interrupted_upload_detection(self, mock_session):
+        """Test that interrupted uploads are detected and marked for re-upload."""
+        # Mock S3 client to simulate an interrupted upload scenario
+        mock_s3_client = Mock()
+        mock_session.return_value.client.return_value = mock_s3_client
+        
+        # Simulate S3 object with correct metadata but wrong size (interrupted upload)
+        mock_response = {
+            'ContentLength': 512,  # S3 shows smaller size (interrupted)
+            'Metadata': {
+                'source-sha256': 'abc123'  # Metadata was set before interruption
+            }
+        }
+        mock_s3_client.head_object.return_value = mock_response
+        
+        local_files = [
+            {
+                'filename': 'interrupted.h5ad',
+                'local_path': Path('/tmp/interrupted.h5ad'),
+                'size': 1024,  # Local file is larger than S3 object
+                'checksum': 'abc123',  # Same checksum as S3 metadata
+                'modified': '2023-01-01T00:00:00Z'
+            }
+        ]
+        
+        # Create sync engine with mocked S3 client
+        sync = SmartSync(self.config)
+        
+        # Test comparison - should detect size mismatch and mark for upload
+        files_to_upload = sync._compare_with_s3(local_files, "s3://test-bucket/path/", force=False)
+        
+        # File should be marked for upload due to size mismatch
+        assert len(files_to_upload) == 1
+        assert files_to_upload[0]['filename'] == 'interrupted.h5ad'
+        assert files_to_upload[0]['reason'] == 'changed'
+        
+        # Verify head_object was called
+        assert mock_s3_client.head_object.call_count == 1
+
+    @patch('boto3.Session')
+    def test_compare_with_s3_complete_upload_detection(self, mock_session):
+        """Test that complete uploads with matching size and checksum are skipped."""
+        # Mock S3 client to simulate a complete, valid upload
+        mock_s3_client = Mock()
+        mock_session.return_value.client.return_value = mock_s3_client
+        
+        # Simulate S3 object with correct metadata AND correct size
+        mock_response = {
+            'ContentLength': 1024,  # Matches local file size
+            'Metadata': {
+                'source-sha256': 'abc123'  # Matches local file checksum
+            }
+        }
+        mock_s3_client.head_object.return_value = mock_response
+        
+        local_files = [
+            {
+                'filename': 'complete.h5ad',
+                'local_path': Path('/tmp/complete.h5ad'),
+                'size': 1024,  # Same size as S3 object
+                'checksum': 'abc123',  # Same checksum as S3 metadata
+                'modified': '2023-01-01T00:00:00Z'
+            }
+        ]
+        
+        # Create sync engine with mocked S3 client
+        sync = SmartSync(self.config)
+        
+        # Test comparison - should skip file as it's complete and identical
+        files_to_upload = sync._compare_with_s3(local_files, "s3://test-bucket/path/", force=False)
+        
+        # No files should be marked for upload
+        assert len(files_to_upload) == 0
+        
+        # Verify head_object was called
+        assert mock_s3_client.head_object.call_count == 1
+
+    @patch('boto3.Session')
+    def test_compare_with_s3_missing_metadata_detection(self, mock_session):
+        """Test that files with missing source-sha256 metadata are marked for re-upload."""
+        # Mock S3 client to simulate an object without our metadata
+        mock_s3_client = Mock()
+        mock_session.return_value.client.return_value = mock_s3_client
+        
+        # Simulate S3 object with correct size but missing metadata
+        mock_response = {
+            'ContentLength': 1024,  # Correct size
+            'Metadata': {}  # No source-sha256 metadata
+        }
+        mock_s3_client.head_object.return_value = mock_response
+        
+        local_files = [
+            {
+                'filename': 'no_metadata.h5ad',
+                'local_path': Path('/tmp/no_metadata.h5ad'),
+                'size': 1024,
+                'checksum': 'abc123',
+                'modified': '2023-01-01T00:00:00Z'
+            }
+        ]
+        
+        # Create sync engine with mocked S3 client
+        sync = SmartSync(self.config)
+        
+        # Test comparison - should mark for upload due to missing metadata
+        files_to_upload = sync._compare_with_s3(local_files, "s3://test-bucket/path/", force=False)
+        
+        # File should be marked for upload due to missing metadata
+        assert len(files_to_upload) == 1
+        assert files_to_upload[0]['filename'] == 'no_metadata.h5ad'
+        assert files_to_upload[0]['reason'] == 'changed'
+        
+        # Verify head_object was called
+        assert mock_s3_client.head_object.call_count == 1
+
 class TestSubprocessErrorHandling:
     """Test enhanced subprocess error handling in sync engine."""
     

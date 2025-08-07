@@ -31,6 +31,7 @@ class Colors:
     GREEN = "[green]"
     RESET = "[/red]"
     GREEN_RESET = "[/green]"
+    WHITE = "[white]"
 
 # Message templates for consistent formatting
 class Messages:
@@ -86,6 +87,13 @@ def format_file_count(file_count: int, action: str) -> str:
 def format_status(status: str) -> str:
     """Format status message with consistent styling."""
     return f"[green]{status}[/green]"
+
+def format_tool(tool: str) -> str:
+    """Format tool message with performance context and recommendations."""
+    if tool == "s5cmd":
+        return "[white]Using s5cmd for best performance[/white]"
+    else:  # aws
+        return "[white]Using AWS CLI for uploads. Install s5cmd for better performance.[/white]"
 
 # Banner display function
 def _display_banner(local_path: Path, s3_path: str, dry_run: bool = False) -> None:
@@ -255,8 +263,13 @@ def sync(
     try:
         sync_engine = _initialize_sync_engine(config, profile, console)
         
-        # Step 3: Scan local files
-        _display_step(3, "Scanning local file system for .h5ad files")
+        # Step 3: Determine upload tool
+        _display_step(3, "Determining upload tool")
+        upload_tool = sync_engine._detect_upload_tool()
+        console.print(format_tool(upload_tool))
+        
+        # Step 4: Scan local files
+        _display_step(4, "Scanning local file system for .h5ad files")
         
         # Perform sync to get upload plan (always get plan first except for dry_run)
         if dry_run:
@@ -302,8 +315,8 @@ def sync(
             console.print("[green]Sync completed successfully[/green]")
             return
         
-        # Step 4: Compare with S3
-        _display_step(4, "Comparing with S3 (using SHA256 checksums)")
+        # Step 5: Compare with S3
+        _display_step(5, "Comparing with S3 (using SHA256 checksums and file size)")
         
         # Display upload plan for all modes
         if 'files_to_upload' in result and result['files_to_upload']:
@@ -320,11 +333,11 @@ def sync(
                     return
                 console.print()  # Add blank line after confirmation
                 
-                # Step 5: Generate manifest
-                _display_step(5, "Generating and saving manifest locally")
+                # Step 6: Generate manifest
+                _display_step(6, "Generating and saving manifest locally")
                 
-                # Step 6: Upload files
-                _display_step(6, "Uploading files")
+                # Step 7: Upload files
+                _display_step(7, "Uploading files")
                 
                 # Upload with the original force setting (preserves normal vs force behavior)
                 result = sync_engine.sync(
@@ -336,9 +349,9 @@ def sync(
                     plan_only=False  # Actually execute the upload
                 )
                 
-                # Step 7: Upload manifest (if files were uploaded)
+                # Step 8: Upload manifest (if files were uploaded)
                 if result.get('files_uploaded', 0) > 0:
-                    _display_step(7, "Uploading manifest to S3")
+                    _display_step(8, "Uploading manifest to S3")
         else:
             # No files to upload - but only show "all up to date" if there are actually files
             local_files = result.get('local_files', [])

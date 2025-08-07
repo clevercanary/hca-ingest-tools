@@ -119,6 +119,99 @@ class TestSmartSync:
         sync._reset_aws_clients()
         assert sync._s3_client is None
 
+    def test_build_s3_url_basic(self):
+        """Test basic S3 URL construction."""
+        sync = SmartSync(self.config)
+        
+        file_info = {
+            'filename': 'test.h5ad',
+            'local_path': Path('/tmp/test.h5ad'),
+            'size': 1024,
+            'checksum': 'abc123',
+            'modified': '2023-01-01T00:00:00Z'
+        }
+        
+        s3_url = sync._build_s3_url(file_info, "s3://my-bucket/path/to/folder")
+        assert s3_url == "s3://my-bucket/path/to/folder/test.h5ad"
+    
+    @patch('shutil.which')
+    def test_detect_upload_tool_s5cmd_available(self, mock_which):
+        """Test upload tool detection when s5cmd is available."""
+        sync = SmartSync(self.config)
+        
+        # Mock s5cmd being available
+        def which_side_effect(tool):
+            return "/usr/local/bin/s5cmd" if tool == "s5cmd" else None
+        
+        mock_which.side_effect = which_side_effect
+        
+        tool = sync._detect_upload_tool()
+        assert tool == "s5cmd"
+        
+        # Verify s5cmd was checked first
+        mock_which.assert_any_call("s5cmd")
+    
+    @patch('shutil.which')
+    def test_detect_upload_tool_aws_cli_fallback(self, mock_which):
+        """Test upload tool detection falls back to AWS CLI when s5cmd is not available."""
+        sync = SmartSync(self.config)
+        
+        # Mock s5cmd not available, but AWS CLI is
+        def which_side_effect(tool):
+            if tool == "s5cmd":
+                return None
+            elif tool == "aws":
+                return "/usr/local/bin/aws"
+            return None
+        
+        mock_which.side_effect = which_side_effect
+        
+        tool = sync._detect_upload_tool()
+        assert tool == "aws"
+        
+        # Verify both tools were checked
+        mock_which.assert_any_call("s5cmd")
+        mock_which.assert_any_call("aws")
+    
+    @patch('shutil.which')
+    def test_detect_upload_tool_both_available_prefers_s5cmd(self, mock_which):
+        """Test upload tool detection prefers s5cmd when both tools are available."""
+        sync = SmartSync(self.config)
+        
+        # Mock both tools being available
+        def which_side_effect(tool):
+            if tool == "s5cmd":
+                return "/usr/local/bin/s5cmd"
+            elif tool == "aws":
+                return "/usr/local/bin/aws"
+            return None
+        
+        mock_which.side_effect = which_side_effect
+        
+        tool = sync._detect_upload_tool()
+        assert tool == "s5cmd"
+        
+        # Should only check s5cmd since it's found first
+        mock_which.assert_called_once_with("s5cmd")
+    
+    @patch('shutil.which')
+    def test_detect_upload_tool_neither_available_raises_error(self, mock_which):
+        """Test upload tool detection raises error when neither tool is available."""
+        sync = SmartSync(self.config)
+        
+        # Mock neither tool being available
+        mock_which.return_value = None
+        
+        with pytest.raises(RuntimeError) as exc_info:
+            sync._detect_upload_tool()
+        
+        assert "Neither s5cmd nor AWS CLI found" in str(exc_info.value)
+        assert "Please install AWS CLI or s5cmd" in str(exc_info.value)
+        
+        # Verify both tools were checked
+        mock_which.assert_any_call("s5cmd")
+        mock_which.assert_any_call("aws")
+
     @patch('boto3.Session')
     def test_compare_with_s3_missing_files(self, mock_session):
         """Test S3 comparison when files don't exist in S3 (404/NoSuchKey)."""
@@ -403,9 +496,17 @@ class TestSubprocessErrorHandling:
         # stdout should NOT be captured (not in call_args)
         assert 'stdout' not in call_args[1] or call_args[1].get('stdout') is None
     
+    @patch('pathlib.Path.stat')
+    @patch('hca_smart_sync.checksum.ChecksumCalculator.calculate_sha256')
     @patch('subprocess.run')
-    def test_upload_files_uses_reusable_method(self, mock_run):
-        """Test that _upload_files uses the new reusable _run_aws_cli_command method."""
+    def test_upload_files_uses_reusable_method(self, mock_run, mock_calculate_sha256, mock_stat):
+        """Test that _upload_file uses the unified upload method."""
+        # Mock file system operations
+        mock_stat.return_value.st_size = 1024 * 1024
+        
+        # Mock checksum calculation
+        mock_calculate_sha256.return_value = 'abc123'
+        
         # Mock successful subprocess run
         mock_result = Mock()
         mock_result.returncode = 0
@@ -415,32 +516,22 @@ class TestSubprocessErrorHandling:
         mock_console = Mock()
         sync = SmartSync(self.config, console=mock_console)
         
-        files_to_upload = [
-            {
-                'filename': 'test.h5ad',
-                'local_path': '/path/test.h5ad',
-                'checksum': 'abc123'
-            }
-        ]
+        # Test the unified upload method directly
+        file_path = '/path/test.h5ad'
+        s3_url = "s3://test-bucket/test-atlas/source-datasets/test.h5ad"
         
         # Should complete successfully
-        result = sync._upload_files(files_to_upload, "s3://test-bucket/test-atlas/source-datasets/")
+        result = sync._upload_file(file_path, s3_url, include_checksum=True, file_size=1024*1024)
         
-        # Verify subprocess.run was called once (by the reusable method)
+        # Verify subprocess.run was called once (by the unified method)
         mock_run.assert_called_once()
         
-        # Verify success message was printed
-        success_calls = [call for call in mock_console.print.call_args_list 
-                        if 'Successfully uploaded' in str(call)]
-        assert len(success_calls) > 0
-        
-        # Verify file was added to uploaded_files
-        assert len(result) == 1
-        assert result[0]['filename'] == 'test.h5ad'
+        # Verify upload was successful
+        assert result is True
     
     @patch('subprocess.run')
     def test_manifest_upload_uses_reusable_method(self, mock_run):
-        """Test that manifest upload uses the new reusable _run_aws_cli_command method."""
+        """Test that manifest upload uses the new unified _upload_file method."""
         # Mock successful subprocess run
         mock_result = Mock()
         mock_result.returncode = 0
@@ -450,7 +541,7 @@ class TestSubprocessErrorHandling:
         mock_console = Mock()
         sync = SmartSync(self.config, console=mock_console)
         
-        # Test the manifest upload method
+        # Create a temporary manifest file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             f.write('{"test": "manifest"}')
             manifest_path = f.name
@@ -458,17 +549,14 @@ class TestSubprocessErrorHandling:
         try:
             sync._upload_manifest_to_s3(
                 manifest_path, 
-                "s3://test-bucket/test-atlas/source-datasets/"
+                "s3://test-bucket/test-atlas/manifests/"
             )
             
-            # Verify subprocess.run was called once (by the reusable method)
+            # Verify subprocess.run was called once (by the unified upload method)
             mock_run.assert_called_once()
             
-            # Verify the command includes the manifest path and manifests folder
+            # Verify the manifest file path is in the command
             call_args = mock_run.call_args[0][0]  # First positional arg (cmd)
-            assert 'aws' in call_args
-            assert 's3' in call_args
-            assert 'cp' in call_args
             assert manifest_path in call_args
             assert 'manifests' in ' '.join(call_args)
             
@@ -496,148 +584,3 @@ class TestTransferAcceleration:
             )
         )
     
-    def test_build_aws_cli_command_upload_with_transfer_acceleration(self):
-        """Test that S3 upload commands include Transfer Acceleration endpoint."""
-        sync = SmartSync(self.config)
-        
-        # Test local file to S3 upload
-        cmd = sync._build_aws_cli_command(
-            operation="cp",
-            source="/local/path/test.h5ad",
-            destination="s3://test-bucket/test-atlas/source-datasets/test.h5ad",
-            metadata={"source-sha256": "abc123def456"}
-        )
-        
-        # Verify Transfer Acceleration endpoint is included
-        assert "--endpoint-url" in cmd
-        endpoint_index = cmd.index("--endpoint-url")
-        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"
-        
-        # Verify other expected components
-        assert "aws" in cmd
-        assert "s3" in cmd
-        assert "cp" in cmd
-        assert "/local/path/test.h5ad" in cmd
-        assert "s3://test-bucket/test-atlas/source-datasets/test.h5ad" in cmd
-        assert "--metadata" in cmd
-        assert "source-sha256=abc123def456" in cmd
-        assert "--profile" in cmd
-        assert "test-profile" in cmd
-    
-    def test_build_aws_cli_command_download_with_transfer_acceleration(self):
-        """Test that S3 download commands include Transfer Acceleration endpoint."""
-        sync = SmartSync(self.config)
-        
-        # Test S3 to local file download
-        cmd = sync._build_aws_cli_command(
-            operation="cp",
-            source="s3://test-bucket/test-atlas/source-datasets/test.h5ad",
-            destination="/local/path/test.h5ad"
-        )
-        
-        # Verify Transfer Acceleration endpoint is included
-        assert "--endpoint-url" in cmd
-        endpoint_index = cmd.index("--endpoint-url")
-        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"
-        
-        # Verify other expected components
-        assert "aws" in cmd
-        assert "s3" in cmd
-        assert "cp" in cmd
-        assert "s3://test-bucket/test-atlas/source-datasets/test.h5ad" in cmd
-        assert "/local/path/test.h5ad" in cmd
-        assert "--profile" in cmd
-        assert "test-profile" in cmd
-    
-    def test_build_aws_cli_command_s3_to_s3_with_transfer_acceleration(self):
-        """Test that S3 to S3 copy commands include Transfer Acceleration endpoint."""
-        sync = SmartSync(self.config)
-        
-        # Test S3 to S3 copy
-        cmd = sync._build_aws_cli_command(
-            operation="cp",
-            source="s3://source-bucket/path/test.h5ad",
-            destination="s3://dest-bucket/path/test.h5ad"
-        )
-        
-        # Verify Transfer Acceleration endpoint is included
-        assert "--endpoint-url" in cmd
-        endpoint_index = cmd.index("--endpoint-url")
-        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"
-        
-        # Verify other expected components
-        assert "aws" in cmd
-        assert "s3" in cmd
-        assert "cp" in cmd
-        assert "s3://source-bucket/path/test.h5ad" in cmd
-        assert "s3://dest-bucket/path/test.h5ad" in cmd
-        assert "--profile" in cmd
-        assert "test-profile" in cmd
-    
-    def test_build_aws_cli_command_with_metadata_and_acceleration(self):
-        """Test that metadata and Transfer Acceleration work together correctly."""
-        sync = SmartSync(self.config)
-        
-        # Test with multiple metadata fields
-        cmd = sync._build_aws_cli_command(
-            operation="cp",
-            source="/local/path/test.h5ad",
-            destination="s3://test-bucket/test-atlas/source-datasets/test.h5ad",
-            metadata={
-                "source-sha256": "abc123def456",
-                "upload-tool": "hca-smart-sync",
-                "version": "1.0.0"
-            }
-        )
-        
-        # Verify Transfer Acceleration endpoint is included
-        assert "--endpoint-url" in cmd
-        endpoint_index = cmd.index("--endpoint-url")
-        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"
-        
-        # Verify metadata is properly formatted (each field gets its own --metadata flag)
-        assert "--metadata" in cmd
-        
-        # Count metadata occurrences (should be 3)
-        metadata_count = cmd.count("--metadata")
-        assert metadata_count == 3
-        
-        # Check that all metadata fields are present as separate arguments
-        cmd_str = " ".join(cmd)
-        assert "source-sha256=abc123def456" in cmd_str
-        assert "upload-tool=hca-smart-sync" in cmd_str
-        assert "version=1.0.0" in cmd_str
-        
-        # Verify command structure
-        assert "aws" in cmd
-        assert "s3" in cmd
-        assert "cp" in cmd
-        assert "--profile" in cmd
-        assert "test-profile" in cmd
-    
-    def test_build_aws_cli_command_order_consistency(self):
-        """Test that command arguments are in consistent order."""
-        sync = SmartSync(self.config)
-        
-        cmd = sync._build_aws_cli_command(
-            operation="cp",
-            source="/local/path/test.h5ad",
-            destination="s3://test-bucket/test-atlas/source-datasets/test.h5ad",
-            metadata={"source-sha256": "abc123"}
-        )
-        
-        # Verify basic command structure order
-        assert cmd[0] == "aws"
-        assert cmd[1] == "s3"
-        assert cmd[2] == "cp"
-        assert cmd[3] == "/local/path/test.h5ad"
-        assert cmd[4] == "s3://test-bucket/test-atlas/source-datasets/test.h5ad"
-        
-        # Verify that profile and endpoint-url are present (order may vary for flags)
-        assert "--profile" in cmd
-        assert "--endpoint-url" in cmd
-        assert "--metadata" in cmd
-        
-        # Verify endpoint URL value immediately follows the flag
-        endpoint_index = cmd.index("--endpoint-url")
-        assert cmd[endpoint_index + 1] == "https://s3-accelerate.amazonaws.com"

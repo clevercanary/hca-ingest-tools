@@ -1,6 +1,8 @@
 """Smart sync engine for HCA data uploads."""
 
-import json
+import hashlib
+import os
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -8,7 +10,6 @@ from typing import Dict, List, Optional, Tuple
 
 import boto3
 from rich.console import Console
-from rich.table import Table
 from rich.prompt import Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from natsort import natsorted
@@ -115,10 +116,13 @@ class SmartSync:
         if not dry_run:
             manifest_path = self._generate_and_save_manifest_locally(files_to_upload, s3_path, local_path)
         
-        # Step 5: Upload files using AWS CLI
+        # Step 5: Upload files using the unified upload method
         uploaded_files = []
         if not dry_run:
-            uploaded_files = self._upload_files(files_to_upload, s3_path)
+            for file_info in files_to_upload:
+                s3_url = self._build_s3_url(file_info, s3_path)
+                if self._upload_file(str(file_info['local_path']), s3_url, include_checksum=True, file_size=file_info['size']):
+                    uploaded_files.append(file_info)
         else:
             uploaded_files = files_to_upload  # For dry run reporting
         
@@ -202,30 +206,123 @@ class SmartSync:
         
         return files_to_upload
     
-    def _upload_files(self, files_to_upload: List[Dict], s3_path: str) -> List[Dict]:
-        """Upload files using AWS CLI."""
-        uploaded_files = []
-        bucket, prefix = self._parse_s3_path(s3_path)
+    def _upload_file(self, local_path: str, s3_url: str, include_checksum: bool = True, file_size: Optional[int] = None) -> bool:
+        """Upload a single file using the best available tool.
         
-        for file_info in files_to_upload:
-            s3_key = f"{prefix.rstrip('/')}/{file_info['filename']}"
-            s3_url = f"s3://{bucket}/{s3_key}"
+        Args:
+            local_path: Local file path
+            s3_url: S3 destination URL
+            include_checksum: Whether to include source-sha256 metadata (for data files)
+            file_size: Optional file size for timeout calculation
             
-            # Build AWS CLI command
-            cmd = self._build_aws_cli_command("cp", str(file_info['local_path']), s3_url, 
-                                              metadata={"source-sha256": file_info['checksum']})
-            
-            # Execute upload using reusable method
-            self._run_aws_cli_command(cmd, f"upload {file_info['filename']}")
-            
-            uploaded_files.append(file_info)
-            
-            # Show success message after each upload
-            self.console.print(f"[green]Successfully uploaded: {file_info['filename']}[/green]")
-            self.console.print()  # Add blank line between uploads
+        Returns:
+            bool: True if upload successful, False otherwise
+        """
+        upload_tool = self._detect_upload_tool()
+        local_file = Path(local_path)
+        filename = local_file.name
         
-        return uploaded_files
-    
+        # Get file size if not provided
+        if file_size is None:
+            file_size = local_file.stat().st_size
+        
+        if upload_tool == "s5cmd":
+            # Build s5cmd command
+            cmd = [
+                "s5cmd",
+                "--numworkers", "10" if include_checksum else "1",  # High concurrency for data files, single for manifests
+            ]
+            
+            # Add transfer acceleration endpoint if enabled
+            if self.config.s3.use_transfer_acceleration:
+                cmd.extend(["--endpoint-url", "https://s3-accelerate.amazonaws.com"])
+            
+            cmd.extend(["cp", "--show-progress"])
+            
+            # Add metadata for data files (not manifests)
+            if include_checksum:
+                checksum = self.checksum_calculator.calculate_sha256(local_file)
+                cmd.extend(["--metadata", f"source-sha256={checksum}"])
+            
+            cmd.extend([str(local_file), s3_url])
+            
+            # Set up environment with AWS profile if specified
+            env = os.environ.copy()
+            if self.config.aws.profile:
+                env["AWS_PROFILE"] = self.config.aws.profile
+            
+            try:
+                import time
+                start_time = time.time()
+                
+                # Calculate upload timeout
+                upload_timeout = self._calculate_upload_timeout(file_size)
+                
+                result = subprocess.run(
+                    cmd,
+                    env=env,
+                    text=True,
+                    timeout=upload_timeout
+                )
+                
+                if result.returncode == 0:
+                    self._report_upload_success(filename, file_size, start_time)
+                    return True
+                else:
+                    # Re-run command to capture error output for reporting
+                    error_result = subprocess.run(
+                        cmd,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    self.console.print(f"[red]s5cmd upload failed for {filename}: {error_result.stderr}[/red]")
+                    return False
+                    
+            except subprocess.TimeoutExpired:
+                self.console.print(f"[red]Upload timeout for {filename} (exceeded {upload_timeout} seconds)[/red]")
+                return False
+            except Exception as e:
+                self.console.print(f"[red]Error uploading {filename} with s5cmd: {str(e)}[/red]")
+                return False
+        else:
+            # Use AWS CLI
+            import time
+            start_time = time.time()
+            
+            if include_checksum:
+                checksum = self.checksum_calculator.calculate_sha256(Path(local_path))
+                metadata = {"source-sha256": checksum}
+                cmd = self._build_aws_cli_command("cp", local_path, s3_url, metadata)
+            else:
+                cmd = self._build_aws_cli_command("cp", local_path, s3_url)
+            
+            try:
+                self._run_aws_cli_command(cmd, f"upload {filename}", file_size)
+                self._report_upload_success(filename, file_size, start_time)
+                return True
+            except Exception:
+                return False
+
+    def _report_upload_success(self, filename: str, file_size: int, start_time: float) -> None:
+        """Report successful upload with speed calculation.
+        
+        Args:
+            filename: Name of the uploaded file
+            file_size: File size in bytes
+            start_time: Upload start time from time.time()
+        """
+        import time
+        end_time = time.time()
+        duration = end_time - start_time
+        file_size_mb = file_size / (1024 * 1024)  # Convert to MB
+        speed_mbps = file_size_mb / duration if duration > 0 else 0
+        
+        # Show success message with speed
+        self.console.print(f"[green]Successfully uploaded: {filename} ({speed_mbps:.1f} MB/s)[/green]")
+        self.console.print()  # Add blank line between uploads
+
     def _generate_and_save_manifest_locally(self, files_to_upload: List[Dict], s3_path: str, local_path: Path) -> str:
         """Generate and save manifest file locally."""
         
@@ -257,11 +354,10 @@ class SmartSync:
         manifest_prefix = "/".join(prefix.rstrip('/').split('/')[:-1] + ['manifests'])
         manifest_s3_url = f"s3://{bucket}/{manifest_prefix}/{manifest_path.split('/')[-1]}"
         
-        cmd = self._build_aws_cli_command("cp", manifest_path, manifest_s3_url)
-        
-        # Execute upload using reusable method
-        manifest_filename = manifest_path.split('/')[-1]
-        self._run_aws_cli_command(cmd, f"upload manifest {manifest_filename}")
+        # Use unified upload method without checksum metadata (manifests don't need source-sha256)
+        success = self._upload_file(manifest_path, manifest_s3_url, include_checksum=False)
+        if not success:
+            raise RuntimeError(f"Failed to upload manifest: {manifest_path}")
     
     def _parse_s3_path(self, s3_path: str) -> Tuple[str, str]:
         """Parse S3 path into bucket and prefix."""
@@ -274,7 +370,27 @@ class SmartSync:
         
         return bucket, prefix
 
-    def _build_aws_cli_command(self, operation: str, source: str, destination: str, 
+    def _detect_upload_tool(self) -> str:
+        """Detect available upload tools and return the best one.
+        
+        Returns:
+            str: 's5cmd' if available, 'aws' otherwise
+            
+        Raises:
+            RuntimeError: If neither tool is available
+        """
+        # Check for s5cmd first (preferred for performance)
+        if shutil.which("s5cmd"):
+            return "s5cmd"
+        
+        # Fall back to AWS CLI
+        if shutil.which("aws"):
+            return "aws"
+        
+        # Neither tool available
+        raise RuntimeError("Neither s5cmd nor AWS CLI found. Please install AWS CLI or s5cmd.")
+
+    def _build_aws_cli_command(self, operation: str, source: str, destination: str,
                               metadata: Optional[Dict[str, str]] = None) -> List[str]:
         """Build AWS CLI command with consistent profile handling.
         
@@ -305,13 +421,42 @@ class SmartSync:
         
         return cmd
     
-    def _run_aws_cli_command(self, cmd: List[str], operation_description: str) -> None:
+    def _build_s3_url(self, file_info: Dict, s3_path: str) -> str:
+        """Build S3 URL for a file."""
+        bucket, prefix = self._parse_s3_path(s3_path)
+        s3_key = f"{prefix.rstrip('/')}/{file_info['filename']}"
+        return f"s3://{bucket}/{s3_key}"
+    
+    def _calculate_upload_timeout(self, file_size_bytes: int) -> int:
+        """Calculate appropriate upload timeout based on file size.
+        
+        Args:
+            file_size_bytes: File size in bytes
+            
+        Returns:
+            Timeout in seconds (minimum 30 minutes, maximum 6 hours)
+        """
+        # Assume minimum 1 MB/s upload speed (very conservative)
+        # Add 10 minutes base time for connection setup and overhead
+        file_size_mb = file_size_bytes / (1024 * 1024)
+        calculated_timeout = int(file_size_mb / 1.0) + 600  # 1 MB/s + 10 min overhead
+        
+        # Minimum 30 minutes, maximum 6 hours for very large files
+        return max(1800, min(calculated_timeout, 21600))
+
+    def _run_aws_cli_command(self, cmd: List[str], operation_description: str, file_size_bytes: Optional[int] = None) -> None:
         """Run AWS CLI command with consistent error handling and progress display.
         
         Args:
             cmd: AWS CLI command as list of strings
             operation_description: Description of the operation for error messages (e.g., "upload file.h5ad")
+            file_size_bytes: Optional file size in bytes for timeout calculation
         """
+        # Calculate appropriate timeout if file size is provided
+        upload_timeout = None
+        if file_size_bytes is not None:
+            upload_timeout = self._calculate_upload_timeout(file_size_bytes)
+        
         try:
             # Run with stderr capture only to preserve AWS CLI progress on stdout
             result = subprocess.run(
@@ -319,8 +464,15 @@ class SmartSync:
                 capture_output=False,  # Let stdout (progress) show naturally
                 stderr=subprocess.PIPE,  # Capture stderr for error handling
                 text=True,
+                timeout=upload_timeout,
                 check=True
             )
+        except subprocess.TimeoutExpired as e:
+            timeout_msg = f"Upload timeout for {operation_description}"
+            if upload_timeout:
+                timeout_msg += f" (exceeded {upload_timeout} seconds)"
+            self.console.print(f"[red]❌ {timeout_msg}[/red]")
+            raise subprocess.CalledProcessError(1, cmd, stderr=timeout_msg) from e
         except subprocess.CalledProcessError as e:
             # Enhance the error with detailed AWS CLI output
             error_details = [f"Failed to {operation_description}"]

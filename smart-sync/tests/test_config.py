@@ -34,7 +34,7 @@ class TestConfig:
         s3_config = S3Config()
         
         assert s3_config.bucket_name is None
-        assert s3_config.use_transfer_acceleration is False
+        assert s3_config.use_transfer_acceleration is True
         assert s3_config.multipart_threshold == 64 * 1024 * 1024
         assert s3_config.max_concurrency == 10
     

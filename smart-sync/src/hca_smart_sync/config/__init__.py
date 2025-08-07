@@ -21,7 +21,7 @@ class S3Config(BaseModel):
     """S3-specific configuration."""
     
     bucket_name: Optional[str] = Field(default=None, description="Default S3 bucket name")
-    use_transfer_acceleration: bool = Field(default=False, description="Use S3 transfer acceleration")
+    use_transfer_acceleration: bool = Field(default=True, description="Use S3 transfer acceleration")
     multipart_threshold: int = Field(default=64 * 1024 * 1024, description="Multipart upload threshold in bytes")
     max_concurrency: int = Field(default=10, description="Maximum concurrent uploads")
 
@@ -68,7 +68,7 @@ class Config(BaseSettings):
             ),
             s3=S3Config(
                 bucket_name=os.getenv("HCA_S3_BUCKET"),
-                use_transfer_acceleration=os.getenv("HCA_S3_TRANSFER_ACCELERATION", "false").lower() == "true",
+                use_transfer_acceleration=os.getenv("HCA_S3_TRANSFER_ACCELERATION", "true").lower() == "true",
             ),
             manifest=ManifestConfig(
                 include_checksums=os.getenv("HCA_MANIFEST_INCLUDE_CHECKSUMS", "true").lower() == "true",

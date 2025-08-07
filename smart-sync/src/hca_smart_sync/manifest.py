@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from natsort import natsorted
 from hca_smart_sync.checksum import ChecksumCalculator
 
 
@@ -41,9 +42,11 @@ class ManifestGenerator:
             "submitter": submitter_info or {},
         }
         
+        # Sort files using natural sorting for consistent ordering
+        sorted_files = natsorted(files, key=lambda x: x.name)
+        
         # Add file information
-        # Files are already sorted upstream for consistent ordering
-        for file_path in files:
+        for file_path in sorted_files:
             if file_path.exists():
                 file_info = {
                     "filename": file_path.name,

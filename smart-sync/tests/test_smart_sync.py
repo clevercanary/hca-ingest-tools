@@ -264,6 +264,49 @@ class TestManifestGenerator:
                     file_path.unlink()
             temp_dir.rmdir()
     
+    def test_manifest_natural_sorting_order(self):
+        """Test that manifest generation uses natural sorting for file order."""
+        # Create temporary test files with names that sort differently with natural vs lexicographic sorting
+        test_files = []
+        temp_dir = Path(tempfile.mkdtemp())
+        
+        try:
+            # Create test files in a specific order that would be different with lexicographic sorting
+            filenames = ['file10.h5ad', 'file2.h5ad', 'file1.h5ad']  # Intentionally out of natural order
+            for filename in filenames:
+                test_file = temp_dir / filename
+                test_file.write_text(f"Test content for {filename}")
+                test_files.append(test_file)
+            
+            # Generate manifest
+            metadata = {"study": "test-study", "version": "1.0"}
+            submitter_info = {"name": "Test User", "email": "test@example.com"}
+            
+            manifest = self.generator.generate_manifest(
+                files=test_files,
+                metadata=metadata,
+                submitter_info=submitter_info
+            )
+            
+            # Verify manifest structure
+            assert "files" in manifest
+            assert len(manifest["files"]) == 3
+            
+            # Verify natural sorting order in manifest: file1.h5ad, file2.h5ad, file10.h5ad
+            # (NOT lexicographic order which would be: file1.h5ad, file10.h5ad, file2.h5ad)
+            filenames_in_manifest = [file_info["filename"] for file_info in manifest["files"]]
+            expected_natural_order = ['file1.h5ad', 'file2.h5ad', 'file10.h5ad']
+            
+            assert filenames_in_manifest == expected_natural_order, (
+                f"Expected natural sort order {expected_natural_order}, "
+                f"but got {filenames_in_manifest}"
+            )
+            
+        finally:
+            # Clean up
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    
     def test_manifest_save(self):
         """Test saving manifest to file."""
         # Create a simple manifest

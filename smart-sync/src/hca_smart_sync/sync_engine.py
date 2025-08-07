@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.prompt import Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from natsort import natsorted
 
 from hca_smart_sync.config import Config
 from hca_smart_sync.checksum import ChecksumCalculator
@@ -87,8 +88,8 @@ class SmartSync:
                 "all_up_to_date": True  # Flag to indicate files exist but are up-to-date
             }
         
-        # Sort files alphabetically once for consistent ordering throughout workflow
-        files_to_upload = sorted(files_to_upload, key=lambda x: x['filename'])
+        # Sort files using natural sorting for consistent ordering throughout workflow
+        files_to_upload = natsorted(files_to_upload, key=lambda x: x['filename'])
         
         # For dry run, return early with the plan
         if dry_run:

@@ -25,14 +25,6 @@ app = typer.Typer(
 )
 console = Console()
 
-# Color constants for consistent styling
-class Colors:
-    RED = "[red]"
-    GREEN = "[green]"
-    RESET = "[/red]"
-    GREEN_RESET = "[/green]"
-    WHITE = "[white]"
-
 # Message templates for consistent formatting
 class Messages:
     # Error messages
@@ -73,11 +65,11 @@ RESULT_MESSAGES = {
 # Common message helpers
 def error_msg(message: str) -> str:
     """Format error message with consistent styling."""
-    return f"{Colors.RED}{message}{Colors.RESET}"
+    return f"[red]{message}[/red]"
 
 def success_msg(message: str) -> str:
     """Format success message with consistent styling."""
-    return f"{Colors.GREEN}{message}{Colors.GREEN_RESET}"
+    return f"[green]{message}[/green]"
 
 # Common formatting helpers
 def format_file_count(file_count: int, action: str) -> str:

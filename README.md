@@ -130,16 +130,9 @@ hca-atlas-tracker    →  Tracks submitted data
 # Clone and setup
 git clone https://github.com/clevercanary/hca-ingest-tools.git
 cd hca-ingest-tools
-
-# Install development dependencies
-make dev
-
-# Run tests
-make test-all
-
-# Run linting
-make lint
 ```
+
+See [smart-sync readme](/smart-sync/README.md) for additional information.
 
 ### Contributing
 

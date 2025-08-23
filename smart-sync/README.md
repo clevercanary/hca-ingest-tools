@@ -25,20 +25,20 @@ poetry run hca-smart-sync sync gut-v1 --profile my-profile --environment dev
 ## Development
 
 ```bash
-# Install dependencies
-poetry install
+# Install development dependencies
+make dev
 
 # Run tests
-poetry run pytest
+make test-all
 
 # Run with coverage
-poetry run pytest --cov=src
+make test-cov
+
+# Run linting
+make lint
 
 # Format code
-poetry run black src tests
-
-# Type checking
-poetry run mypy src
+make format
 ```
 
 ## Features

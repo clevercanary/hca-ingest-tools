@@ -117,9 +117,9 @@ hca-atlas-tracker    →  Tracks submitted data
 
 ### Workflow Integration
 
-1. **Validate** your data with `hca-validation-tools`
-2. **Upload** with `hca-smart-sync` (this tool)
-3. **Track** submission status in `hca-atlas-tracker`
+1. **Upload** with `hca-smart-sync` (this tool)
+2. **Track** submission status in `hca-atlas-tracker`
+3. **Validate** data with `hca-validation-tools`
 4. **Monitor** validation results and processing
 
 ## Development

@@ -132,14 +132,13 @@ git clone https://github.com/clevercanary/hca-ingest-tools.git
 cd hca-ingest-tools
 
 # Install development dependencies
-poetry install --with dev,test
+make dev
 
 # Run tests
-poetry run pytest
+make test-all
 
 # Run linting
-poetry run ruff check
-poetry run mypy src/
+make lint
 ```
 
 ### Contributing

@@ -14,21 +14,18 @@ This repository contains tools that help researchers submit biological data to H
 
 ```
 hca-ingest-tools/
-├── src/
-│   └── hca_ingest/
-│       ├── smart_sync/           # Main sync tool
-│       │   ├── cli.py           # Command-line interface
-│       │   ├── sync_engine.py   # Core sync logic
-│       │   ├── manifest.py      # Manifest generation
-│       │   └── checksum.py      # Integrity verification
-│       ├── upload_helpers/       # Upload utilities
-│       │   ├── batch_upload.py  # Batch operations
-│       │   └── progress.py      # Progress tracking
-│       └── config/              # Configuration management
-├── tests/                       # Test suite
-├── docs/                        # User documentation
-├── pyproject.toml              # Poetry configuration
-└── README.md                   # This file
+├── smart-sync/
+│   ├── docs/                    # User documentation
+│   ├── src/
+│   │   └── hca_smart_sync/      # Main sync tool
+│   │       ├── config/          # Configuration management
+│   │       ├── cli.py           # Command-line interface
+│   │       ├── sync_engine.py   # Core sync logic
+│   │       ├── manifest.py      # Manifest generation
+│   │       └── checksum.py      # Integrity verification
+│   ├── tests/                   # Test suite
+│   └── pyproject.toml           # Poetry configuration
+└── README.md                    # This file
 ```
 
 ## Installation

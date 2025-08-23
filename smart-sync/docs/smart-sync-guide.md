@@ -292,15 +292,3 @@ Your IAM user/role needs these permissions:
   ]
 }
 ```
-
-## Support
-
-- **Documentation**: [GitHub Wiki](https://github.com/your-org/hca-ingest-tools/wiki)
-- **Issues**: [GitHub Issues](https://github.com/your-org/hca-ingest-tools/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/hca-ingest-tools/discussions)
-
-## Related Tools
-
-- **HCA Validation Tools**: Data validation and quality checks
-- **HCA Atlas Tracker**: Submission tracking and status management
-- **AWS CLI**: Underlying upload engine

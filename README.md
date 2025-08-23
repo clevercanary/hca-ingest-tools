@@ -128,7 +128,7 @@ hca-atlas-tracker    →  Tracks submitted data
 
 ```bash
 # Clone and setup
-git clone https://github.com/your-org/hca-ingest-tools.git
+git clone https://github.com/clevercanary/hca-ingest-tools.git
 cd hca-ingest-tools
 
 # Install development dependencies
@@ -159,12 +159,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/your-org/hca-ingest-tools/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/hca-ingest-tools/discussions)
+- **Documentation**: [docs/](smart-sync/docs/)
+- **Issues**: [GitHub Issues](https://github.com/clevercanary/hca-ingest-tools/issues)
 
 ## Related Projects
 
-- [hca-validation-tools](https://github.com/your-org/hca-validation-tools) - Data validation and quality tools
-- [hca-atlas-tracker](https://github.com/your-org/hca-atlas-tracker) - Submission tracking and management
-- [hca-atlas-tracker-tf-config](https://github.com/your-org/hca-atlas-tracker-tf-config) - Infrastructure as code
+- [hca-validation-tools](https://github.com/clevercanary/hca-validation-tools) - Data validation and quality tools
+- [hca-atlas-tracker](https://github.com/clevercanary/hca-atlas-tracker) - Submission tracking and management

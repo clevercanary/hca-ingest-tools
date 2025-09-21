@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.2.0...hca-smart-sync-v0.2.1) (2025-09-21)
+
+
+### Bug Fixes
+
+* specify recent twine version in publish workflow ([#8](https://github.com/clevercanary/hca-ingest-tools/issues/8)) ([#10](https://github.com/clevercanary/hca-ingest-tools/issues/10)) ([8593f40](https://github.com/clevercanary/hca-ingest-tools/commit/8593f40d1c4cfe149685fa7cb49c648cbdc4f238))
+
 ## [0.2.0](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.1.0...hca-smart-sync-v0.2.0) (2025-09-21)
 
 

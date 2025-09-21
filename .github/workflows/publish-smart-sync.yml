@@ -3,6 +3,7 @@ name: publish-smart-sync
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   id-token: write   # Required for PyPI Trusted Publishing (OIDC)
@@ -10,7 +11,7 @@ permissions:
 
 jobs:
   publish:
-    if: startsWith(github.event.release.tag_name, 'smart-sync-v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'hca-smart-sync-v')
     runs-on: ubuntu-latest
     environment:
       name: pypi

@@ -44,7 +44,7 @@ jobs:
           python -m twine check dist/*
 
       - name: Publish to PyPI (Trusted Publishing)
-        uses: pypa/gh-action-pypi-publish@v1.10.3
+        uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           packages-dir: smart-sync/dist
           # No username/password/token needed with Trusted Publishing

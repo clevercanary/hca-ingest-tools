@@ -1,6 +1,6 @@
 # HCA Smart-Sync
 
-Intelligent S3 data synchronization for HCA Atlas data.
+Intelligent S3 data synchronization for HCA Atlas source datasets and integrated objects.
 
 ## Installation
 

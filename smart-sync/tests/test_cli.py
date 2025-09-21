@@ -4,10 +4,10 @@ import os
 import pytest
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 import click
-import io
+import re
 
 from hca_smart_sync.cli import (
     app, 
@@ -21,10 +21,15 @@ from hca_smart_sync.cli import (
     error_msg,
     success_msg,
     format_file_count,
-    format_status,
-    main
+    format_status
 )
-from hca_smart_sync.config import Config
+
+
+# Helper: strip ANSI escape sequences from CLI output for stable assertions
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+def strip_ansi(s: str) -> str:
+    return ANSI_RE.sub("", s)
 
 
 class TestCLI:
@@ -38,16 +43,18 @@ class TestCLI:
         """Test CLI help command."""
         result = self.runner.invoke(app, ["--help"])
         
+        out = strip_ansi(result.stdout or result.output)
         assert result.exit_code == 0
-        assert "hca-smart-sync" in result.stdout or "Usage:" in result.stdout
+        assert "hca-smart-sync" in out or "Usage:" in out
     
     def test_sync_command_help(self):
         """Test sync command help (sync is the default command)."""
         result = self.runner.invoke(app, ["--help"])
         
+        out = strip_ansi(result.stdout or result.output)
         assert result.exit_code == 0
-        assert "--dry-run" in result.stdout
-        assert "--verbose" in result.stdout
+        assert "--dry-run" in out
+        assert "--verbose" in out
     
     def test_sync_command_missing_args(self):
         """Test sync command with missing atlas argument."""

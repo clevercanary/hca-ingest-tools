@@ -3,7 +3,7 @@
 import tempfile
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pytest
 
 from hca_smart_sync.config import Config, AWSConfig, S3Config, ManifestConfig

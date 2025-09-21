@@ -1,7 +1,6 @@
 """Command-line interface for HCA Smart Sync."""
 
 import os
-import sys
 import subprocess
 from enum import Enum
 from pathlib import Path
@@ -109,7 +108,7 @@ def _display_upload_plan(files_to_upload: List[Dict], s3_path: str, dry_run: boo
     """Display the upload plan to the user."""
     action = "Would upload" if dry_run else "Will upload"
     
-    console.print(f"\n[bold green]Upload Plan[/bold green]")
+    console.print("\n[bold green]Upload Plan[/bold green]")
     
     table = Table(border_style="bright_black")
     table.add_column("File", style="bright_black")

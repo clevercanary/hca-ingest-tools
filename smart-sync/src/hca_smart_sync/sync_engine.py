@@ -1,6 +1,5 @@
 """Smart sync engine for HCA data uploads."""
 
-import hashlib
 import os
 import shutil
 import subprocess
@@ -10,8 +9,6 @@ from typing import Dict, List, Optional, Tuple
 
 import boto3
 from rich.console import Console
-from rich.prompt import Confirm
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from natsort import natsorted
 
 from hca_smart_sync.config import Config
@@ -458,8 +455,9 @@ class SmartSync:
             upload_timeout = self._calculate_upload_timeout(file_size_bytes)
         
         try:
-            # Run with stderr capture only to preserve AWS CLI progress on stdout
-            result = subprocess.run(
+            # Let stdout (progress) stream to console; capture stderr for diagnostics.
+            # With check=True we rely on exceptions for error handling; no need to capture the result.
+            subprocess.run(
                 cmd,
                 capture_output=False,  # Let stdout (progress) show naturally
                 stderr=subprocess.PIPE,  # Capture stderr for error handling
@@ -535,5 +533,5 @@ class SmartSync:
                 return False
             else:
                 return False
-        except Exception as e:
+        except Exception:
             return False

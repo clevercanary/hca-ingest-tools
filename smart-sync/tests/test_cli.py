@@ -4,10 +4,9 @@ import os
 import pytest
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 import click
-import io
 
 from hca_smart_sync.cli import (
     app, 
@@ -21,10 +20,8 @@ from hca_smart_sync.cli import (
     error_msg,
     success_msg,
     format_file_count,
-    format_status,
-    main
+    format_status
 )
-from hca_smart_sync.config import Config
 
 
 class TestCLI:

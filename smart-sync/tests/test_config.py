@@ -1,9 +1,7 @@
 """Tests for HCA Ingest Tools configuration."""
 
-import os
 from pathlib import Path
 
-import pytest
 
 from hca_smart_sync.config import Config, AWSConfig, S3Config
 

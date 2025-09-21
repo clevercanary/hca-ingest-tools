@@ -8,7 +8,6 @@ import pytest
 
 from hca_smart_sync.checksum import ChecksumCalculator
 from hca_smart_sync.manifest import ManifestGenerator
-from hca_smart_sync.config import Config
 
 
 class TestChecksumCalculator:

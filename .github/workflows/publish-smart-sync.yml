@@ -38,8 +38,9 @@ jobs:
         working-directory: smart-sync
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade twine
-          twine check dist/*
+          python -m pip install --upgrade "twine>=5.1.1" "pkginfo>=1.10.0" "packaging>=24.0"
+          python -m twine --version
+          python -m twine check dist/*
 
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@v1.10.3

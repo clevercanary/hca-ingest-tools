@@ -1,0 +1,15 @@
+# Changelog
+
+## [0.2.0](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.1.0...hca-smart-sync-v0.2.0) (2025-09-21)
+
+
+### Features
+
+* add publishing and test run workflows ([#5](https://github.com/clevercanary/hca-ingest-tools/issues/5)) ([0da707b](https://github.com/clevercanary/hca-ingest-tools/commit/0da707bcbbbc6e759472445e26cd4bbdf6a5aec9))
+* add publishing and test run workflows ([#5](https://github.com/clevercanary/hca-ingest-tools/issues/5)) ([0da707b](https://github.com/clevercanary/hca-ingest-tools/commit/0da707bcbbbc6e759472445e26cd4bbdf6a5aec9))
+
+
+### Bug Fixes
+
+* correct ruff errors ([#5](https://github.com/clevercanary/hca-ingest-tools/issues/5)) ([89fc582](https://github.com/clevercanary/hca-ingest-tools/commit/89fc5822caca19fdfeccae70c7486a52d187da90))
+* strip ANSI colors in test assertions ([#5](https://github.com/clevercanary/hca-ingest-tools/issues/5)) ([92c9e4c](https://github.com/clevercanary/hca-ingest-tools/commit/92c9e4ce2d2a1b44eebaaf3a39091515fb295f4b))

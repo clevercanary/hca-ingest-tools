@@ -1,6 +1,6 @@
 # HCA Smart-Sync
 
-Intelligent S3 synchronization for HCA Atlas data.
+Intelligent S3 data synchronization for HCA Atlas data.
 
 ## Installation
 
@@ -53,6 +53,7 @@ make format
 ## Configuration
 
 The tool supports environment-based bucket selection:
+
 - `prod` (default): `hca-atlas-tracker-data`
 - `dev`: `hca-atlas-tracker-data-dev`
 

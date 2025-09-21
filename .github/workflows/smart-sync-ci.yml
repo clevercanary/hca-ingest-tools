@@ -1,0 +1,44 @@
+name: smart-sync CI
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "smart-sync/**"
+      - ".github/workflows/**"
+  push:
+    branches: [ main ]
+    paths:
+      - "smart-sync/**"
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies (with dev)
+        working-directory: smart-sync
+        run: poetry install --with dev
+
+      - name: Lint (ruff)
+        working-directory: smart-sync
+        run: poetry run ruff check src tests
+
+      - name: Run tests (pytest)
+        working-directory: smart-sync
+        run: poetry run pytest -q

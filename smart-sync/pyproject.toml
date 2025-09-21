@@ -2,8 +2,20 @@
 name = "hca-smart-sync"
 version = "0.1.0"
 description = "Intelligent S3 synchronization for HCA Atlas data"
-authors = ["HCA Team <team@example.com>"]
+authors = ["HCA Team <dave@clevercanary.com>"]
 readme = "README.md"
+license = "Apache-2.0"
+keywords = ["HCA", "S3", "sync", "bioinformatics", "datasets", "checksum", "manifest"]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering",
+]
+include = ["LICENSE"]
 packages = [{include = "hca_smart_sync", from = "src"}]
 
 [tool.poetry.dependencies]
@@ -29,6 +41,11 @@ ruff = "^0.1.0"
 
 [tool.poetry.scripts]
 hca-smart-sync = "hca_smart_sync.cli:main"
+
+[tool.poetry.urls]
+Homepage = "https://github.com/clevercanary/hca-ingest-tools/tree/main/smart-sync"
+Repository = "https://github.com/clevercanary/hca-ingest-tools"
+Issues = "https://github.com/clevercanary/hca-ingest-tools/issues"
 
 [build-system]
 requires = ["poetry-core"]

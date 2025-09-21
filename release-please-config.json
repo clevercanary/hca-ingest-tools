@@ -1,0 +1,11 @@
+{
+  "packages": {
+    "smart-sync": {
+      "path": "smart-sync",
+      "release-type": "python",
+      "package-name": "hca-smart-sync",
+      "changelog-path": "smart-sync/CHANGELOG.md",
+      "include-component-in-tag": true
+    }
+  }
+}

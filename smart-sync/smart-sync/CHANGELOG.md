@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.2](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.2.1...hca-smart-sync-v0.2.2) (2025-09-22)
+
+
+### Bug Fixes
+
+* update release please action version ([#13](https://github.com/clevercanary/hca-ingest-tools/issues/13)) ([#14](https://github.com/clevercanary/hca-ingest-tools/issues/14)) ([9c8211f](https://github.com/clevercanary/hca-ingest-tools/commit/9c8211f242c2e986759889c398c9536d2c7ce3b7))
+
+
+### Chores
+
+* use latest v1 pypi publishing workflow ([#8](https://github.com/clevercanary/hca-ingest-tools/issues/8)) ([#12](https://github.com/clevercanary/hca-ingest-tools/issues/12)) ([fca7ab6](https://github.com/clevercanary/hca-ingest-tools/commit/fca7ab68b8621101e6608ed80e27e049324e590f))
+
 ## [0.2.1](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.2.0...hca-smart-sync-v0.2.1) (2025-09-21)
 
 

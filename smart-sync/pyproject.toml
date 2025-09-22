@@ -43,7 +43,7 @@ ruff = "^0.1.0"
 hca-smart-sync = "hca_smart_sync.cli:main"
 
 [tool.poetry.urls]
-Homepage = "https://github.com/clevercanary/hca-ingest-tools/tree/main/smart-sync"
+Homepage = "https://github.com/clevercanary/hca-ingest-tools/blob/main/smart-sync/README.md"
 Repository = "https://github.com/clevercanary/hca-ingest-tools"
 Issues = "https://github.com/clevercanary/hca-ingest-tools/issues"
 

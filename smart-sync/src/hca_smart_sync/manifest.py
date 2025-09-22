@@ -62,7 +62,7 @@ class ManifestGenerator:
     
     def save_manifest(self, manifest: Dict, output_path: Path) -> None:
         """
-        Save manifest to a JSON file.
+        Save the manifest to a JSON file.
         
         Args:
             manifest: The manifest dictionary

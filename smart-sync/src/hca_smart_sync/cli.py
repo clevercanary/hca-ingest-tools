@@ -20,9 +20,19 @@ from hca_smart_sync.sync_engine import SmartSync
 app = typer.Typer(
     name="hca-smart-sync",
     help="Intelligent S3 synchronization for HCA Atlas data",
+    epilog="💡 Tip: Run 'hca-smart-sync sync --help' for detailed sync command options",
     add_completion=False,  # Disable shell completion for simplicity
 )
 console = Console()
+
+
+@app.callback(invoke_without_command=True)
+def main_callback(ctx: typer.Context) -> None:
+    """HCA Smart-Sync - Intelligent S3 synchronization for HCA Atlas data."""
+    # If no subcommand was invoked, show help
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit(0)
 
 # Message templates for consistent formatting
 class Messages:
@@ -386,9 +396,6 @@ def _display_results(result: dict, dry_run: bool) -> None:
 
 def main() -> None:
     """Main entry point for the CLI."""
-    if not _check_aws_cli():
-        _display_aws_cli_installation_help()
-        raise typer.Exit(1)
     app()
 
 

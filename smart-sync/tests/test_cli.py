@@ -48,8 +48,8 @@ class TestCLI:
         assert "hca-smart-sync" in out or "Usage:" in out
     
     def test_sync_command_help(self):
-        """Test sync command help (sync is the default command)."""
-        result = self.runner.invoke(app, ["--help"])
+        """Test sync command help."""
+        result = self.runner.invoke(app, ["sync", "--help"])
         
         out = strip_ansi(result.stdout or result.output)
         assert result.exit_code == 0
@@ -57,13 +57,13 @@ class TestCLI:
         assert "--verbose" in out
     
     def test_sync_command_missing_args(self):
-        """Test sync command with missing atlas argument shows help."""
-        result = self.runner.invoke(app, [])
+        """Test sync command with missing atlas argument fails."""
+        result = self.runner.invoke(app, ["sync"])
         
-        # Should show help instead of failing
-        assert result.exit_code == 0
-        out = strip_ansi(result.stdout or result.output)
-        assert "Usage:" in out or "hca-smart-sync" in out
+        # Should fail - atlas is required
+        assert result.exit_code != 0
+        out = strip_ansi(result.stderr if result.stderr else result.stdout)
+        assert "Missing argument" in out or "required" in out.lower()
     
     def test_sync_command_with_invalid_atlas(self):
         """Test sync command with invalid atlas name."""
@@ -74,7 +74,7 @@ class TestCLI:
             mock_init.return_value = mock_sync_engine
             
             # Test with an atlas that would likely fail validation
-            result = self.runner.invoke(app, ["invalid-atlas-name", "--dry-run"])
+            result = self.runner.invoke(app, ["sync", "invalid-atlas-name", "--dry-run"])
             
             # Should either fail or show some error (depending on validation)
             # This test mainly ensures the command structure works
@@ -83,7 +83,7 @@ class TestCLI:
     def test_sync_command_with_invalid_environment(self):
         """Test sync command with invalid environment value."""
         # Test with invalid environment value - should be rejected by Typer enum validation
-        result = self.runner.invoke(app, ["gut-v1", "--environment", "devv", "--dry-run"])
+        result = self.runner.invoke(app, ["sync", "gut-v1", "--environment", "devv", "--dry-run"])
         
         # Should fail due to invalid environment enum value
         assert result.exit_code != 0
@@ -107,7 +107,7 @@ class TestCLI:
             # Note: These may still fail later due to AWS access, but enum validation should pass
             
             # Test prod environment
-            result_prod = self.runner.invoke(app, ["gut-v1", "--environment", "prod", "--dry-run"])
+            result_prod = self.runner.invoke(app, ["sync", "gut-v1", "--environment", "prod", "--dry-run"])
             # Should not fail due to enum validation (may fail later for other reasons)
             # If it fails, it shouldn't be due to invalid enum value
             if result_prod.exit_code != 0:
@@ -116,7 +116,7 @@ class TestCLI:
                 assert "Invalid value for '--environment'" not in error_output
             
             # Test dev environment  
-            result_dev = self.runner.invoke(app, ["gut-v1", "--environment", "dev", "--dry-run"])
+            result_dev = self.runner.invoke(app, ["sync", "gut-v1", "--environment", "dev", "--dry-run"])
             # Should not fail due to enum validation (may fail later for other reasons)
             if result_dev.exit_code != 0:
                 error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
@@ -410,7 +410,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "No .h5ad files found in directory" in result.output
@@ -454,7 +454,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "Found 3 .h5ad files - all up to date" in result.output
@@ -496,7 +496,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "Found 1 .h5ad file - all up to date" in result.output  # Singular "file"

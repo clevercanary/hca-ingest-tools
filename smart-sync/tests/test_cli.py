@@ -57,11 +57,13 @@ class TestCLI:
         assert "--verbose" in out
     
     def test_sync_command_missing_args(self):
-        """Test sync command with missing atlas argument."""
+        """Test sync command with missing atlas argument shows help."""
         result = self.runner.invoke(app, [])
         
-        # Should fail due to missing required atlas argument
-        assert result.exit_code != 0
+        # Should show help instead of failing
+        assert result.exit_code == 0
+        out = strip_ansi(result.stdout or result.output)
+        assert "Usage:" in out or "hca-smart-sync" in out
     
     def test_sync_command_with_invalid_atlas(self):
         """Test sync command with invalid atlas name."""
@@ -265,6 +267,35 @@ class TestCLIArgumentValidation:
     # These tests are obsolete since we removed custom error handling in Typer 0.16.0 upgrade
     # The main() function now just calls app() directly and Typer handles all errors natively
     pass
+
+
+class TestNoArgsHelp:
+    """Test help display when no arguments provided."""
+    
+    def setup_method(self):
+        """Set up test runner."""
+        self.runner = CliRunner()
+    
+    def test_no_args_shows_help(self):
+        """Test that running with no arguments displays help."""
+        result = self.runner.invoke(app, [])
+        
+        out = strip_ansi(result.stdout or result.output)
+        assert result.exit_code == 0
+        assert "Usage:" in out or "hca-smart-sync" in out
+        # Should show command descriptions
+        assert "sync" in out.lower()
+    
+    def test_help_works_without_aws_cli(self):
+        """Test that --help works even without AWS CLI installed."""
+        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check:
+            mock_check.return_value = False
+            
+            result = self.runner.invoke(app, ["--help"])
+            
+            out = strip_ansi(result.stdout or result.output)
+            assert result.exit_code == 0
+            assert "Usage:" in out or "hca-smart-sync" in out
 
 
 class TestAWSCLIDependencyCheck:

@@ -6,7 +6,7 @@ try:
     __version__ = version("hca-smart-sync")
 except PackageNotFoundError:
     # Package metadata not available (e.g., during local source runs)
-    __version__ = "0.2.2"
+    __version__ = "0.2.3"
 
 __author__ = "HCA Team"
 __email__ = "hca-team@example.com"

@@ -559,7 +559,13 @@ class TestSyncScenarios:
             runner = CliRunner()
             result = runner.invoke(app, ["sync", "gut-v1", "integrated-objects", "--profile", "test"])
             
+            # Verify command succeeded
+            assert result.exit_code == 0
+            
             # Verify that _build_s3_path was called with "integrated-objects" folder
             mock_build_s3_path.assert_called_once()
             call_args = mock_build_s3_path.call_args
             assert call_args[0][2] == "integrated-objects"  # Third positional arg is folder
+            
+            # Verify sync engine was actually invoked
+            mock_sync_engine.sync.assert_called_once()

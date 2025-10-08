@@ -230,6 +230,10 @@ class Environment(str, Enum):
     prod = "prod"
     dev = "dev"
 
+class FileType(str, Enum):
+    source_datasets = "source-datasets"
+    integrated_objects = "integrated-objects"
+
 @app.command()
 def sync(
     atlas: Annotated[str, typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1)")],

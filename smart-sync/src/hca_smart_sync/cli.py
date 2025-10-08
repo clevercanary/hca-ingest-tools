@@ -15,6 +15,7 @@ from rich.prompt import Confirm
 
 from hca_smart_sync.config import Config
 from hca_smart_sync.sync_engine import SmartSync
+from hca_smart_sync import __version__
 
 # Create the Typer app instance with proper configuration
 app = typer.Typer(
@@ -27,8 +28,16 @@ console = Console()
 
 
 @app.callback(invoke_without_command=True)
-def main_callback(ctx: typer.Context) -> None:
+def main_callback(
+    ctx: typer.Context,
+    version: Annotated[bool, typer.Option("--version", help="Show version and exit")] = False,
+) -> None:
     """HCA Smart-Sync - Intelligent S3 synchronization for HCA Atlas data."""
+    # Handle version flag
+    if version:
+        typer.echo(f"hca-smart-sync {__version__}")
+        raise typer.Exit(0)
+    
     # If no subcommand was invoked, show help
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())

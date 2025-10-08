@@ -47,6 +47,16 @@ class TestCLI:
         assert result.exit_code == 0
         assert "hca-smart-sync" in out or "Usage:" in out
     
+    def test_cli_version(self):
+        """Test --version flag shows version."""
+        result = self.runner.invoke(app, ["--version"])
+        
+        out = strip_ansi(result.stdout or result.output)
+        assert result.exit_code == 0
+        assert "hca-smart-sync" in out
+        # Version should be in format like "0.2.3"
+        assert any(char.isdigit() for char in out), "Version output should contain version number"
+    
     def test_sync_command_help(self):
         """Test sync command help."""
         result = self.runner.invoke(app, ["sync", "--help"])

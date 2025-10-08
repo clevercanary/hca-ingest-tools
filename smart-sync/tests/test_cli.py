@@ -132,6 +132,25 @@ class TestCLI:
                 error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
                 assert "is not one of" not in error_output
                 assert "Invalid value for '--environment'" not in error_output
+    
+    def test_sync_command_missing_file_type(self):
+        """Test sync command with missing file_type argument fails."""
+        result = self.runner.invoke(app, ["sync", "gut-v1"])
+        
+        # Should fail - file_type is required
+        assert result.exit_code != 0
+        error_output = result.stderr if result.stderr else result.stdout
+        assert "Missing argument" in error_output or "required" in error_output.lower()
+    
+    def test_sync_command_with_invalid_file_type(self):
+        """Test sync command with invalid file_type value."""
+        result = self.runner.invoke(app, ["sync", "gut-v1", "invalid-folder-type", "--dry-run"])
+        
+        # Should fail due to invalid file_type enum value
+        assert result.exit_code != 0
+        # Check that error message mentions valid choices
+        error_output = result.stderr if result.stderr else result.stdout
+        assert "is not one of" in error_output or "Invalid value" in error_output
 
 
 class TestHelperFunctions:

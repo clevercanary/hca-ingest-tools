@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.2.2...hca-smart-sync-v0.2.3) (2025-10-07)
+
+
+### Bug Fixes
+
+* don't crash on launch with no args and switch to explicit commands ([#18](https://github.com/clevercanary/hca-ingest-tools/issues/18)) ([2fe8b47](https://github.com/clevercanary/hca-ingest-tools/commit/2fe8b472da06c54b5a3aaf0008effb7bb1a87ca0))
+
 ## [0.2.2](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.2.1...hca-smart-sync-v0.2.2) (2025-09-22)
 
 

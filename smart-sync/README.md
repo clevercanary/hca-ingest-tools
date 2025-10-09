@@ -36,7 +36,7 @@ hca-smart-sync sync gut-v1 source-datasets --profile my-profile --dry-run
 - `--profile TEXT` - AWS profile to use
 - `--dry-run` - Preview changes without uploading
 - `--verbose` - Show detailed output
-- `--force` - Force upload even if checksums match
+- `--force` - Force upload even if file content is unchanged
 - `--local-path TEXT` - Custom local directory (defaults to current directory)
 
 ### Getting Help

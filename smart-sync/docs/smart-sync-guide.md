@@ -74,7 +74,7 @@ hca-smart-sync sync ATLAS FILE_TYPE [OPTIONS]
 
 - `--local-path PATH`: Directory to scan for files (default: current directory)
 - `--dry-run`: Show what would be uploaded without uploading
-- `--force`: Upload all files without confirmation
+- `--force`: Upload all files even if unchanged
 - `--verbose`: Show detailed output
 
 **Examples:**
@@ -92,7 +92,7 @@ hca-smart-sync sync gut-v1 source-datasets --profile my-profile --dry-run
 # Upload from specific directory
 hca-smart-sync sync immune-v1 source-datasets --profile my-profile --local-path /data/immune/batch1
 
-# Force upload without confirmation
+# Force upload even for unchanged files
 hca-smart-sync sync adipose-v1 integrated-objects --profile my-profile --force
 ```
 
@@ -109,7 +109,7 @@ hca-smart-sync sync adipose-v1 integrated-objects --profile my-profile --force
 - Checks each file against S3 using `source-sha256` metadata
 - **New files**: Not found in S3
 - **Changed files**: Different SHA256 checksum
-- **Unchanged files**: Matching SHA256 checksum (skipped)
+- **Unchanged files**: Matching SHA256 checksum (skipped unless forced)
 
 ### 3. Upload Plan
 

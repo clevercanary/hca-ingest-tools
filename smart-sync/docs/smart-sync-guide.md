@@ -13,46 +13,42 @@ HCA S3 Sync is an S3 synchronization tool for uploading biological data (.h5ad f
 
 ## Installation
 
-### Option 1: Install with pipx (Recommended)
-```bash
-pipx install hca-ingest-tools
-```
+### Install with pipx (Recommended)
 
-### Option 2: Install with Poetry (Development)
 ```bash
-git clone https://github.com/your-org/hca-ingest-tools.git
-cd hca-ingest-tools
-poetry install
+pipx install hca-smart-sync
 ```
 
 ### Prerequisites
+
 - **AWS CLI v2.27.60+** (install via Homebrew: `brew install awscli`)
-- **Python 3.8+**
 - **Valid AWS credentials** with S3 access
 
 ## Quick Start
 
 ### 1. Configure AWS Credentials
+
 ```bash
 # Configure your AWS profile
 aws configure --profile your-profile-name
-
-# Or use environment variables
-export AWS_ACCESS_KEY_ID=your-key
-export AWS_SECRET_ACCESS_KEY=your-secret
-export AWS_DEFAULT_REGION=us-east-1
+# Follow the on-screen prompts to enter:
+#   AWS Access Key ID
+#   AWS Secret Access Key
+#   Default region: us-east-1 (required)
+#   Default output format: json
 ```
 
 ### 2. Basic Upload
+
 ```bash
 # Navigate to your data directory
 cd /path/to/your/h5ad/files
 
-# Run sync with required arguments
-hca-smart-sync gut-v1 --profile your-profile-name --environment prod
+# Run sync with required arguments (atlas and file type)
+hca-smart-sync sync gut-v1 source-datasets --profile your-profile-name
 
 # Or specify a different directory
-hca-smart-sync gut-v1 --profile your-profile-name --environment dev --local-path /data/gut/
+hca-smart-sync sync gut-v1 source-datasets --profile your-profile-name --local-path /data/gut/
 ```
 
 ## Command Reference
@@ -62,100 +58,86 @@ hca-smart-sync gut-v1 --profile your-profile-name --environment dev --local-path
 Upload .h5ad files to S3 with checksum-based synchronization.
 
 ```bash
-hca-smart-sync ATLAS [OPTIONS]
+hca-smart-sync sync ATLAS FILE_TYPE [OPTIONS]
 ```
 
 **Arguments:**
+
 - `ATLAS`: Atlas name (e.g., `gut-v1`, `immune-v1`, `adipose-v1`)
+- `FILE_TYPE`: File type - either `source-datasets` or `integrated-objects`
 
 **Required Options:**
+
 - `--profile NAME`: AWS profile to use (required)
 
 **Optional Arguments:**
-- `--environment ENV`: Target environment (`dev` or `prod`, default: `prod`)
+
 - `--local-path PATH`: Directory to scan for files (default: current directory)
 - `--dry-run`: Show what would be uploaded without uploading
-- `--force`: Upload all files without confirmation
+- `--force`: Upload all files even if unchanged
+- `--verbose`: Show detailed output
 
 **Examples:**
-```bash
-# Basic upload to production
-hca-smart-sync gut-v1 --profile my-profile
 
-# Upload to development environment
-hca-smart-sync gut-v1 --profile my-profile --environment dev
+```bash
+# Upload source datasets to production
+hca-smart-sync sync gut-v1 source-datasets --profile my-profile
+
+# Upload integrated objects to production
+hca-smart-sync sync gut-v1 integrated-objects --profile my-profile
 
 # Dry run to preview changes
-hca-smart-sync gut-v1 --profile my-profile --dry-run
+hca-smart-sync sync gut-v1 source-datasets --profile my-profile --dry-run
 
 # Upload from specific directory
-hca-smart-sync immune-v1 --profile my-profile --local-path /data/immune/batch1
+hca-smart-sync sync immune-v1 source-datasets --profile my-profile --local-path /data/immune/batch1
 
-# Force upload without confirmation
-hca-smart-sync adipose-v1 --profile my-profile --force
-```
-
-### `hca-smart-sync config-show`
-
-Display current configuration settings.
-
-```bash
-hca-smart-sync config-show [--profile NAME]
+# Force upload even for unchanged files
+hca-smart-sync sync adipose-v1 integrated-objects --profile my-profile --force
 ```
 
 ## How It Works
 
 ### 1. File Scanning
+
 - Scans specified directory for `.h5ad` files
 - Calculates SHA256 checksum for each file
 - Displays found files with sizes
 
 ### 2. S3 Comparison
+
 - Checks each file against S3 using `source-sha256` metadata
 - **New files**: Not found in S3
 - **Changed files**: Different SHA256 checksum
-- **Unchanged files**: Matching SHA256 checksum (skipped)
+- **Unchanged files**: Matching SHA256 checksum (skipped unless forced)
 
 ### 3. Upload Plan
+
 - Shows interactive table with files to upload
 - Displays file size, reason (new/changed), and SHA256 hash
 - Prompts for user confirmation
 
 ### 4. Manifest Generation
+
 - Creates manifest JSON with file metadata immediately after confirmation
 - Saves manifest locally with human-readable timestamp filename
 - Example: `manifest-2025-01-30-14-23-45-123.json`
 
 ### 5. File Upload
+
 - Uploads files using AWS CLI with `source-sha256` metadata
 - Shows real-time progress (speed, bytes transferred)
 - Handles multipart uploads automatically
 
 ### 6. Manifest Upload
+
 - Uploads manifest to S3 `manifests/` folder
 - Triggers submission workflow in tracker application
 
-## Configuration
-
-### AWS Profile Configuration
-```bash
-# Configure a named profile
-aws configure --profile hca-production
-AWS Access Key ID: YOUR_ACCESS_KEY
-AWS Secret Access Key: YOUR_SECRET_KEY
-Default region name: us-east-1
-Default output format: json
-```
-
-### Environment Variables
-```bash
-export AWS_PROFILE=hca-production
-export AWS_DEFAULT_REGION=us-east-1
-```
-
-## File Structure
+## File System Structure
 
 ### S3 Bucket Layout
+
 ```
 your-bucket/
 ├── bio-network/
@@ -166,6 +148,7 @@ your-bucket/
 ```
 
 ### Local Directory After Upload
+
 ```
 your-data-directory/
 ├── file1.h5ad                           # Your data files
@@ -176,14 +159,17 @@ your-data-directory/
 ## Advanced Features
 
 ### Transfer Acceleration
+
 If your S3 bucket has transfer acceleration enabled, smart-sync automatically uses the accelerated endpoint for faster international uploads.
 
 ### Integrity Verification
+
 - **Local**: SHA256 calculated before upload
 - **S3 Metadata**: `source-sha256` stored with each object
 - **Verification**: Any tool can verify file integrity after download
 
 ### Manifest Format
+
 ```json
 {
   "files": [
@@ -209,10 +195,13 @@ If your S3 bucket has transfer acceleration enabled, smart-sync automatically us
 ### Common Issues
 
 #### 1. AWS Credentials Not Found
+
 ```
 Error: Unable to locate credentials
 ```
+
 **Solution**: Configure AWS credentials or specify profile:
+
 ```bash
 aws configure --profile your-profile
 # or
@@ -220,34 +209,43 @@ export AWS_PROFILE=your-profile
 ```
 
 #### 2. S3 Access Denied
+
 ```
 Error: Access denied to bucket 'your-bucket'
 ```
+
 **Solution**: Verify your IAM permissions allow:
+
 - `s3:ListBucket` on the bucket
 - `s3:GetObject` and `s3:PutObject` on objects
 - `s3:PutObjectMetadata` for checksum storage
 
 #### 3. No .h5ad Files Found
+
 ```
 No .h5ad files found in directory
 ```
-**Solution**: 
+
+**Solution**:
+
 - Check you're in the correct directory
 - Use `--local-path` to specify the data directory
 - Verify files have `.h5ad` extension
 
 #### 4. Upload Interrupted
+
 If upload is interrupted (Ctrl+C), you'll have:
+
 - Local manifest file with intended uploads
 - Some files may be partially uploaded
 - Re-run the same command to resume (smart-sync will skip completed files)
 
 ### Debug Mode
-For detailed logging, set environment variable:
+
+For detailed logging, use the `--verbose` flag:
+
 ```bash
-export HCA_DEBUG=1
-hca-smart-sync sync ...
+hca-smart-sync sync gut-v1 source-datasets --profile my-profile --verbose
 ```
 
 ### Performance Tips
@@ -260,6 +258,7 @@ hca-smart-sync sync ...
 ## Integration with HCA Infrastructure
 
 ### Submission Workflow
+
 1. **Upload files** → S3 `source-datasets/` or `integrated-objects/`
 2. **Upload manifest** → S3 `manifests/` folder
 3. **Manifest triggers** → Tracker app creates submission record
@@ -267,26 +266,21 @@ hca-smart-sync sync ...
 5. **Validation results** → Status updates in tracker
 
 ### IAM Policy Requirements
+
 Your IAM user/role needs these permissions:
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "s3:ListBucket",
-        "s3:GetBucketLocation"
-      ],
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
       "Resource": "arn:aws:s3:::your-bucket"
     },
     {
       "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:PutObjectMetadata"
-      ],
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:PutObjectMetadata"],
       "Resource": "arn:aws:s3:::your-bucket/your-atlas/*"
     }
   ]

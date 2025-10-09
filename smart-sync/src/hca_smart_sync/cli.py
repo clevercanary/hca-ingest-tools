@@ -230,14 +230,18 @@ class Environment(str, Enum):
     prod = "prod"
     dev = "dev"
 
+class FileType(str, Enum):
+    source_datasets = "source-datasets"
+    integrated_objects = "integrated-objects"
+
 @app.command()
 def sync(
     atlas: Annotated[str, typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1)")],
+    file_type: Annotated[FileType, typer.Argument(help="File type: source-datasets or integrated-objects")],
     dry_run: Annotated[bool, typer.Option(help="Dry run mode")] = False,
     verbose: Annotated[bool, typer.Option(help="Verbose output")] = False,
     profile: Annotated[Optional[str], typer.Option(help="AWS profile")] = None,
     environment: Annotated[Environment, typer.Option(help="Environment: prod or dev (default: prod)")] = Environment.prod,
-    folder: Annotated[str, typer.Option(help="Target folder (default: source-datasets)")] = "source-datasets",
     force: Annotated[bool, typer.Option(help="Force upload")] = False,
     local_path: Annotated[Optional[str], typer.Option(help="Local directory to scan (defaults to current directory)")] = None,
 ) -> None:
@@ -254,7 +258,7 @@ def sync(
     _validate_configuration(config)
     
     # Build paths
-    s3_path = _build_s3_path(config.s3.bucket_name, atlas, folder)
+    s3_path = _build_s3_path(config.s3.bucket_name, atlas, file_type.value)
     current_dir = _resolve_local_path(local_path)
     
     # Display banner

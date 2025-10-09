@@ -84,7 +84,7 @@ class TestCLI:
             mock_init.return_value = mock_sync_engine
             
             # Test with an atlas that would likely fail validation
-            result = self.runner.invoke(app, ["sync", "invalid-atlas-name", "--dry-run"])
+            result = self.runner.invoke(app, ["sync", "invalid-atlas-name", "source-datasets", "--dry-run"])
             
             # Should either fail or show some error (depending on validation)
             # This test mainly ensures the command structure works
@@ -93,7 +93,7 @@ class TestCLI:
     def test_sync_command_with_invalid_environment(self):
         """Test sync command with invalid environment value."""
         # Test with invalid environment value - should be rejected by Typer enum validation
-        result = self.runner.invoke(app, ["sync", "gut-v1", "--environment", "devv", "--dry-run"])
+        result = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "devv", "--dry-run"])
         
         # Should fail due to invalid environment enum value
         assert result.exit_code != 0
@@ -117,7 +117,7 @@ class TestCLI:
             # Note: These may still fail later due to AWS access, but enum validation should pass
             
             # Test prod environment
-            result_prod = self.runner.invoke(app, ["sync", "gut-v1", "--environment", "prod", "--dry-run"])
+            result_prod = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "prod", "--dry-run"])
             # Should not fail due to enum validation (may fail later for other reasons)
             # If it fails, it shouldn't be due to invalid enum value
             if result_prod.exit_code != 0:
@@ -126,12 +126,31 @@ class TestCLI:
                 assert "Invalid value for '--environment'" not in error_output
             
             # Test dev environment  
-            result_dev = self.runner.invoke(app, ["sync", "gut-v1", "--environment", "dev", "--dry-run"])
+            result_dev = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "dev", "--dry-run"])
             # Should not fail due to enum validation (may fail later for other reasons)
             if result_dev.exit_code != 0:
                 error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
                 assert "is not one of" not in error_output
                 assert "Invalid value for '--environment'" not in error_output
+    
+    def test_sync_command_missing_file_type(self):
+        """Test sync command with missing file_type argument fails."""
+        result = self.runner.invoke(app, ["sync", "gut-v1"])
+        
+        # Should fail - file_type is required
+        assert result.exit_code != 0
+        error_output = result.stderr if result.stderr else result.stdout
+        assert "Missing argument" in error_output or "required" in error_output.lower()
+    
+    def test_sync_command_with_invalid_file_type(self):
+        """Test sync command with invalid file_type value."""
+        result = self.runner.invoke(app, ["sync", "gut-v1", "invalid-folder-type", "--dry-run"])
+        
+        # Should fail due to invalid file_type enum value
+        assert result.exit_code != 0
+        # Check that error message mentions valid choices
+        error_output = result.stderr if result.stderr else result.stdout
+        assert "is not one of" in error_output or "Invalid value" in error_output
 
 
 class TestHelperFunctions:
@@ -420,7 +439,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "No .h5ad files found in directory" in result.output
@@ -464,7 +483,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "Found 3 .h5ad files - all up to date" in result.output
@@ -506,9 +525,47 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "Found 1 .h5ad file - all up to date" in result.output  # Singular "file"
             assert "Uploaded 0 file(s)" in result.output
             assert "Sync completed successfully" in result.output
+
+    def test_sync_integrated_objects_file_type(self):
+        """Test sync command with integrated-objects file type builds correct S3 path."""
+        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
+             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+            
+            # Mock AWS CLI available
+            mock_check_aws_cli.return_value = True
+            
+            # Mock config
+            mock_config = Mock()
+            mock_load_config.return_value = mock_config
+            mock_validate_config.return_value = None
+            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/integrated-objects/"
+            mock_resolve_local_path.return_value = "/test/path"
+            
+            # Mock sync engine to avoid real AWS calls
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {"files_uploaded": 0, "files_to_upload": []}
+            mock_init_sync.return_value = mock_sync_engine
+            
+            runner = CliRunner()
+            result = runner.invoke(app, ["sync", "gut-v1", "integrated-objects", "--profile", "test"])
+            
+            # Verify command succeeded
+            assert result.exit_code == 0
+            
+            # Verify that _build_s3_path was called with "integrated-objects" folder
+            mock_build_s3_path.assert_called_once()
+            call_args = mock_build_s3_path.call_args
+            assert call_args[0][2] == "integrated-objects"  # Third positional arg is folder
+            
+            # Verify sync engine was actually invoked
+            mock_sync_engine.sync.assert_called_once()

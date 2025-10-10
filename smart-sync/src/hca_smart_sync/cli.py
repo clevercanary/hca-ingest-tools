@@ -238,16 +238,43 @@ class FileType(str, Enum):
 
 @app.command()
 def sync(
-    atlas: Annotated[str, typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1)")],
     file_type: Annotated[FileType, typer.Argument(help="File type: source-datasets or integrated-objects")],
+    atlas: Annotated[Optional[str], typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1) - uses config default if not specified")] = None,
     dry_run: Annotated[bool, typer.Option(help="Dry run mode")] = False,
     verbose: Annotated[bool, typer.Option(help="Verbose output")] = False,
-    profile: Annotated[Optional[str], typer.Option(help="AWS profile")] = None,
+    profile: Annotated[Optional[str], typer.Option(help="AWS profile - uses config default if not specified")] = None,
     environment: Annotated[Environment, typer.Option(help="Environment: prod or dev (default: prod)")] = Environment.prod,
     force: Annotated[bool, typer.Option(help="Force upload")] = False,
     local_path: Annotated[Optional[str], typer.Option(help="Local directory to scan (defaults to current directory)")] = None,
 ) -> None:
     """Sync .h5ad files from local directory to S3."""
+    
+    # Load user config file for defaults
+    config_path = get_config_path()
+    try:
+        user_config = load_config(config_path)
+    except yaml.YAMLError:
+        console.print("[yellow]Warning: Config file is malformed. Ignoring config file.[/yellow]")
+        user_config = None
+    
+    if user_config is None:
+        user_config = {}
+    
+    # Use config defaults if not provided via CLI
+    if profile is None and "profile" in user_config:
+        profile = user_config["profile"]
+        console.print(f"[dim]Using profile from config: {profile}[/dim]")
+    
+    if atlas is None and "atlas" in user_config:
+        atlas = user_config["atlas"]
+        console.print(f"[dim]Using atlas from config: {atlas}[/dim]")
+    
+    # Validate atlas is provided
+    if atlas is None:
+        console.print("[red]✗ Error: Atlas is required.[/red]")
+        console.print("Either provide atlas as an argument or set a default in config:")
+        console.print("  hca-smart-sync config init")
+        raise typer.Exit(1)
     
     # Determine bucket based on environment
     if environment == Environment.prod:

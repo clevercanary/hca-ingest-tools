@@ -67,13 +67,13 @@ class TestCLI:
         assert "--verbose" in out
     
     def test_sync_command_missing_args(self):
-        """Test sync command with missing atlas argument fails."""
+        """Test sync command with missing required file_type argument fails."""
         result = self.runner.invoke(app, ["sync"])
         
-        # Should fail - atlas is required
-        assert result.exit_code != 0
+        # Should fail - file_type is required
+        assert result.exit_code == 2  # Typer returns 2 for missing arguments
         out = strip_ansi(result.stderr if result.stderr else result.stdout)
-        assert "Missing argument" in out or "required" in out.lower()
+        assert "missing argument" in out.lower() or "file" in out.lower()
     
     def test_sync_command_with_invalid_atlas(self):
         """Test sync command with invalid atlas name."""
@@ -84,7 +84,7 @@ class TestCLI:
             mock_init.return_value = mock_sync_engine
             
             # Test with an atlas that would likely fail validation
-            result = self.runner.invoke(app, ["sync", "invalid-atlas-name", "source-datasets", "--dry-run"])
+            result = self.runner.invoke(app, ["sync", "source-datasets", "invalid-atlas-name", "--dry-run"])
             
             # Should either fail or show some error (depending on validation)
             # This test mainly ensures the command structure works
@@ -93,7 +93,7 @@ class TestCLI:
     def test_sync_command_with_invalid_environment(self):
         """Test sync command with invalid environment value."""
         # Test with invalid environment value - should be rejected by Typer enum validation
-        result = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "devv", "--dry-run"])
+        result = self.runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--environment", "devv", "--dry-run"])
         
         # Should fail due to invalid environment enum value
         assert result.exit_code != 0
@@ -117,7 +117,7 @@ class TestCLI:
             # Note: These may still fail later due to AWS access, but enum validation should pass
             
             # Test prod environment
-            result_prod = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "prod", "--dry-run"])
+            result_prod = self.runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--environment", "prod", "--dry-run"])
             # Should not fail due to enum validation (may fail later for other reasons)
             # If it fails, it shouldn't be due to invalid enum value
             if result_prod.exit_code != 0:
@@ -126,25 +126,26 @@ class TestCLI:
                 assert "Invalid value for '--environment'" not in error_output
             
             # Test dev environment  
-            result_dev = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "dev", "--dry-run"])
+            result_dev = self.runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--environment", "dev", "--dry-run"])
             # Should not fail due to enum validation (may fail later for other reasons)
             if result_dev.exit_code != 0:
                 error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
                 assert "is not one of" not in error_output
                 assert "Invalid value for '--environment'" not in error_output
     
-    def test_sync_command_missing_file_type(self):
-        """Test sync command with missing file_type argument fails."""
-        result = self.runner.invoke(app, ["sync", "gut-v1"])
+    def test_sync_command_requires_file_type(self):
+        """Test sync command requires file_type argument."""
+        # file_type is now required, so omitting it should fail
+        result = self.runner.invoke(app, ["sync"])
         
         # Should fail - file_type is required
         assert result.exit_code != 0
         error_output = result.stderr if result.stderr else result.stdout
-        assert "Missing argument" in error_output or "required" in error_output.lower()
+        assert "missing argument" in error_output.lower() or "file" in error_output.lower()
     
     def test_sync_command_with_invalid_file_type(self):
         """Test sync command with invalid file_type value."""
-        result = self.runner.invoke(app, ["sync", "gut-v1", "invalid-folder-type", "--dry-run"])
+        result = self.runner.invoke(app, ["sync", "invalid-folder-type", "gut-v1", "--dry-run"])
         
         # Should fail due to invalid file_type enum value
         assert result.exit_code != 0
@@ -439,7 +440,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "No .h5ad files found in directory" in result.output
@@ -483,7 +484,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "Found 3 .h5ad files - all up to date" in result.output
@@ -525,7 +526,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "Found 1 .h5ad file - all up to date" in result.output  # Singular "file"
@@ -557,7 +558,7 @@ class TestSyncScenarios:
             mock_init_sync.return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "gut-v1", "integrated-objects", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "integrated-objects", "gut-v1", "--profile", "test"])
             
             # Verify command succeeded
             assert result.exit_code == 0
@@ -765,3 +766,145 @@ class TestConfigInit:
             config_data = load_config(config_file)
             assert not config_data.get("profile")
             assert config_data.get("atlas") == "gut-v1"
+
+
+class TestSyncWithConfigDefaults:
+    """Tests for sync command using config file defaults."""
+
+    def test_sync_uses_config_profile(self, tmp_path):
+        """Test that sync uses profile from config when not specified."""
+        config_file = tmp_path / "config.yaml"
+        
+        # Create config with profile
+        from hca_smart_sync.config_manager import save_config
+        save_config(config_file, {"profile": "config-profile", "atlas": "gut-v1"})
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
+             patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
+             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+            
+            mock_check_aws_cli.return_value = True
+            mock_config = Mock()
+            mock_config.s3.bucket_name = "test-bucket"
+            mock_load_config.return_value = mock_config
+            mock_build_s3.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mock_resolve.return_value = "/test/path"
+            
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {
+                "files_uploaded": 0,
+                "files_to_upload": [],
+                "manifest_path": None,
+                "no_files_found": True
+            }
+            mock_init_sync.return_value = mock_sync_engine
+            
+            runner = CliRunner()
+            # Don't specify --profile, should use config default
+            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1"])
+            
+            assert result.exit_code == 0
+            # Verify profile from config was passed to _load_and_configure
+            mock_load_config.assert_called_once()
+            assert mock_load_config.call_args[0][0] == "config-profile"
+
+    def test_sync_cli_profile_overrides_config(self, tmp_path):
+        """Test that CLI --profile overrides config file."""
+        config_file = tmp_path / "config.yaml"
+        
+        # Create config with profile
+        from hca_smart_sync.config_manager import save_config
+        save_config(config_file, {"profile": "config-profile"})
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
+             patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
+             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+            
+            mock_check_aws_cli.return_value = True
+            mock_config = Mock()
+            mock_config.s3.bucket_name = "test-bucket"
+            mock_load_config.return_value = mock_config
+            mock_build_s3.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mock_resolve.return_value = "/test/path"
+            
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {
+                "files_uploaded": 0,
+                "files_to_upload": [],
+                "manifest_path": None,
+                "no_files_found": True
+            }
+            mock_init_sync.return_value = mock_sync_engine
+            
+            runner = CliRunner()
+            # Specify --profile, should override config
+            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "cli-profile"])
+            
+            assert result.exit_code == 0
+            # Verify CLI profile was used
+            mock_load_config.assert_called_once()
+            assert mock_load_config.call_args[0][0] == "cli-profile"
+
+    def test_sync_uses_config_atlas_as_default(self, tmp_path):
+        """Test that sync uses atlas from config when not specified."""
+        config_file = tmp_path / "config.yaml"
+        
+        # Create config with atlas
+        from hca_smart_sync.config_manager import save_config
+        save_config(config_file, {"atlas": "immune-v1"})
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
+             patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
+             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+            
+            mock_check_aws_cli.return_value = True
+            mock_config = Mock()
+            mock_config.s3.bucket_name = "test-bucket"
+            mock_load_config.return_value = mock_config
+            mock_build_s3.return_value = "s3://test-bucket/immune/immune-v1/source-datasets/"
+            mock_resolve.return_value = "/test/path"
+            
+            mock_sync_engine = Mock()
+            mock_sync_engine.sync.return_value = {
+                "files_uploaded": 0,
+                "files_to_upload": [],
+                "manifest_path": None,
+                "no_files_found": True
+            }
+            mock_init_sync.return_value = mock_sync_engine
+            
+            runner = CliRunner()
+            # Don't specify atlas, should use config default
+            result = runner.invoke(app, ["sync", "source-datasets"])
+            
+            assert result.exit_code == 0
+            # Verify atlas from config was used in s3 path
+            mock_build_s3.assert_called_once()
+            assert mock_build_s3.call_args[0][1] == "immune-v1"
+            # Verify default file_type (source-datasets) was used
+            assert mock_build_s3.call_args[0][2] == "source-datasets"
+
+    def test_sync_no_config_requires_atlas(self, tmp_path):
+        """Test that sync requires atlas arg when no config exists."""
+        config_file = tmp_path / "nonexistent.yaml"
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            # No config, no atlas arg - should fail
+            result = runner.invoke(app, ["sync", "source-datasets"])
+            
+            # Should fail with helpful message about atlas being required
+            assert result.exit_code == 1
+            assert "atlas" in result.output.lower() and "required" in result.output.lower()

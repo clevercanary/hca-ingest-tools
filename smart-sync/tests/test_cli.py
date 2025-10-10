@@ -73,7 +73,8 @@ class TestCLI:
         # Should fail - file_type is required
         assert result.exit_code == 2  # Typer returns 2 for missing arguments
         out = strip_ansi(result.stderr if result.stderr else result.stdout)
-        assert "missing argument" in out.lower() or "file" in out.lower()
+        # Typer error message contains "Missing argument" for required args
+        assert "missing argument" in out.lower()
     
     def test_sync_command_with_invalid_atlas(self):
         """Test sync command with invalid atlas name."""
@@ -141,7 +142,8 @@ class TestCLI:
         # Should fail - file_type is required
         assert result.exit_code != 0
         error_output = result.stderr if result.stderr else result.stdout
-        assert "missing argument" in error_output.lower() or "file" in error_output.lower()
+        # Typer error message contains "Missing argument" for required args
+        assert "missing argument" in error_output.lower()
     
     def test_sync_command_with_invalid_file_type(self):
         """Test sync command with invalid file_type value."""
@@ -624,8 +626,9 @@ class TestConfigShow:
             
             assert result.exit_code == 0
             assert "profile: my-profile" in result.output
-            # Should not show atlas if not configured
-            assert "atlas:" not in result.output or "not set" in result.output.lower()
+            # Atlas should show as "(not set)" when not configured
+            assert "atlas:" in result.output
+            assert "not set" in result.output
 
     def test_config_show_with_malformed_config(self, tmp_path):
         """Test config show with malformed YAML file."""

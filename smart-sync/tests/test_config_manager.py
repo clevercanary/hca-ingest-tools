@@ -47,7 +47,8 @@ class TestLoadConfig:
         config_file.touch()
 
         loaded_config = load_config(config_file)
-        assert loaded_config is None or loaded_config == {}
+        # Empty file returns None or empty dict
+        assert loaded_config is None or (loaded_config is not None and len(loaded_config) == 0)
 
     def test_load_config_invalid_yaml(self, tmp_path):
         """Test loading a corrupted YAML file."""

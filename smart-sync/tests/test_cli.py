@@ -782,7 +782,7 @@ class TestSyncWithConfigDefaults:
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
              patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
              patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate, \
+             patch('hca_smart_sync.cli._validate_configuration'), \
              patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
              patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
              patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
@@ -823,7 +823,7 @@ class TestSyncWithConfigDefaults:
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
              patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
              patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate, \
+             patch('hca_smart_sync.cli._validate_configuration'), \
              patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
              patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
              patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
@@ -864,7 +864,7 @@ class TestSyncWithConfigDefaults:
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
              patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
              patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate, \
+             patch('hca_smart_sync.cli._validate_configuration'), \
              patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
              patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
              patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:

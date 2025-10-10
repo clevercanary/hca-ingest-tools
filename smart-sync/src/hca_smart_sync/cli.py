@@ -448,9 +448,9 @@ def config_show() -> None:
     
     try:
         config_data = load_config(config_path)
-    except yaml.YAMLError as e:
+    except yaml.YAMLError:
         console.print(f"[red]✗ Error:[/red] Config file at {config_path} is malformed.")
-        console.print(f"[yellow]Please check the YAML syntax or delete the file to start fresh.[/yellow]")
+        console.print("[yellow]Please check the YAML syntax or delete the file to start fresh.[/yellow]")
         raise typer.Exit(1)
     
     if config_data is None:

@@ -1,8 +1,5 @@
 """Tests for user configuration management."""
 
-import tempfile
-from pathlib import Path
-
 import pytest
 import yaml
 

@@ -123,7 +123,7 @@ class TestSaveConfig:
     def test_save_config_overwrites_existing(self, tmp_path):
         """Test that save_config overwrites existing config file."""
         config_file = tmp_path / "config.yaml"
-        
+
         # Save initial config
         initial_data = {"profile": "old-profile", "atlas": "gut-v1"}
         save_config(config_file, initial_data)

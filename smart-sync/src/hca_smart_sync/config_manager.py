@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -18,7 +18,7 @@ def get_config_path() -> Path:
     return Path.home() / ".hca-smart-sync" / "config.yaml"
 
 
-def load_config(config_path: Path) -> Optional[Dict[str, str]]:
+def load_config(config_path: Path) -> Optional[Dict[str, Any]]:
     """Load configuration from YAML file.
 
     Args:
@@ -50,7 +50,7 @@ def load_config(config_path: Path) -> Optional[Dict[str, str]]:
     return config_data
 
 
-def save_config(config_path: Path, config_data: Dict[str, str]) -> None:
+def save_config(config_path: Path, config_data: Dict[str, Any]) -> None:
     """Save configuration to YAML file.
 
     Args:

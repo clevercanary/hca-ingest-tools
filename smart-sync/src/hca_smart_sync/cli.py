@@ -15,7 +15,9 @@ from rich.prompt import Confirm
 
 from hca_smart_sync.config import Config
 from hca_smart_sync.sync_engine import SmartSync
+from hca_smart_sync.config_manager import get_config_path, load_config, save_config
 from hca_smart_sync import __version__
+import yaml
 
 # Create the Typer app instance with proper configuration
 app = typer.Typer(
@@ -405,6 +407,96 @@ def _display_results(result: dict, dry_run: bool) -> None:
     # Display status message (always green for success states)
     console.print(format_status(msg["status"]))
     console.print()  # Add spacing after results
+
+
+# Create config command group
+config_app = typer.Typer(help="Manage configuration settings")
+app.add_typer(config_app, name="config")
+
+
+@config_app.command("show")
+def config_show() -> None:
+    """Display current configuration settings."""
+    config_path = get_config_path()
+    
+    try:
+        config_data = load_config(config_path)
+    except yaml.YAMLError as e:
+        console.print(f"[red]✗ Error:[/red] Config file at {config_path} is malformed.")
+        console.print(f"[yellow]Please check the YAML syntax or delete the file to start fresh.[/yellow]")
+        raise typer.Exit(1)
+    
+    if config_data is None:
+        console.print(f"[yellow]No configuration file found at {config_path}[/yellow]")
+        console.print("Run 'hca-smart-sync config init' to create one.")
+        return
+    
+    # Display config
+    console.print(f"\n[bold]Configuration:[/bold] {config_path}")
+    console.print("─" * 50)
+    
+    if "profile" in config_data:
+        console.print(f"profile: {config_data['profile']}")
+    else:
+        console.print("profile: [dim](not set)[/dim]")
+    
+    if "atlas" in config_data:
+        console.print(f"atlas: {config_data['atlas']}")
+    else:
+        console.print("atlas: [dim](not set)[/dim]")
+    
+    console.print()
+
+
+@config_app.command("init")
+def config_init() -> None:
+    """Initialize or update configuration settings interactively."""
+    config_path = get_config_path()
+    
+    # Load existing config if it exists
+    try:
+        existing_config = load_config(config_path)
+    except yaml.YAMLError:
+        console.print("[yellow]Warning: Existing config file is malformed. Creating new configuration.[/yellow]")
+        existing_config = None
+    
+    if existing_config is None:
+        existing_config = {}
+    
+    console.print("\n[bold]HCA Smart-Sync Configuration[/bold]")
+    console.print("─" * 50)
+    
+    # Prompt for AWS Profile
+    current_profile = existing_config.get("profile", "")
+    if current_profile:
+        profile_prompt = f"AWS Profile [current: {current_profile}]"
+    else:
+        profile_prompt = "AWS Profile"
+    
+    profile = typer.prompt(profile_prompt, default=current_profile, show_default=False)
+    
+    # Prompt for Default Atlas
+    current_atlas = existing_config.get("atlas", "")
+    if current_atlas:
+        atlas_prompt = f"Default Atlas [current: {current_atlas}]"
+    else:
+        atlas_prompt = "Default Atlas"
+    
+    atlas = typer.prompt(atlas_prompt, default=current_atlas, show_default=False)
+    
+    # Build config data (only include non-empty values)
+    config_data = {}
+    if profile:
+        config_data["profile"] = profile
+    if atlas:
+        config_data["atlas"] = atlas
+    
+    # Save configuration
+    save_config(config_path, config_data)
+    
+    console.print()
+    console.print(f"[green]✓ Configuration saved to {config_path}[/green]")
+    console.print()
 
 
 def main() -> None:

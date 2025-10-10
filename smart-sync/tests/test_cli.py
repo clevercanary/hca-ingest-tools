@@ -569,3 +569,199 @@ class TestSyncScenarios:
             
             # Verify sync engine was actually invoked
             mock_sync_engine.sync.assert_called_once()
+
+
+class TestConfigShow:
+    """Tests for 'config show' command."""
+
+    def test_config_show_with_existing_config(self, tmp_path):
+        """Test config show displays existing configuration."""
+        config_file = tmp_path / "config.yaml"
+        config_data = {"profile": "my-profile", "atlas": "gut-v1"}
+        
+        # Create config file
+        from hca_smart_sync.config_manager import save_config
+        save_config(config_file, config_data)
+        
+        # Mock get_config_path to return test file
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            result = runner.invoke(app, ["config", "show"])
+            
+            # Should succeed
+            assert result.exit_code == 0
+            
+            # Should display config values
+            assert "profile: my-profile" in result.output
+            assert "atlas: gut-v1" in result.output
+            # Path should be in output (may be wrapped)
+            assert config_file.name in result.output
+
+    def test_config_show_with_missing_config(self, tmp_path):
+        """Test config show when no config file exists."""
+        config_file = tmp_path / "nonexistent.yaml"
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            result = runner.invoke(app, ["config", "show"])
+            
+            # Should succeed but indicate no config
+            assert result.exit_code == 0
+            assert "No configuration file found" in result.output or "not found" in result.output.lower()
+
+    def test_config_show_with_partial_config(self, tmp_path):
+        """Test config show with only profile (no atlas)."""
+        config_file = tmp_path / "config.yaml"
+        config_data = {"profile": "my-profile"}
+        
+        from hca_smart_sync.config_manager import save_config
+        save_config(config_file, config_data)
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            result = runner.invoke(app, ["config", "show"])
+            
+            assert result.exit_code == 0
+            assert "profile: my-profile" in result.output
+            # Should not show atlas if not configured
+            assert "atlas:" not in result.output or "not set" in result.output.lower()
+
+    def test_config_show_with_malformed_config(self, tmp_path):
+        """Test config show with malformed YAML file."""
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w") as f:
+            f.write("invalid: yaml: content: [")
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            result = runner.invoke(app, ["config", "show"])
+            
+            # Should fail with error message
+            assert result.exit_code == 1
+            assert "malformed" in result.output.lower() or "error" in result.output.lower()
+            assert config_file.name in result.output
+
+
+class TestConfigInit:
+    """Tests for 'config init' command."""
+
+    def test_config_init_create_new(self, tmp_path):
+        """Test config init creates new configuration."""
+        config_file = tmp_path / "config.yaml"
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            # Provide interactive input: profile and atlas
+            result = runner.invoke(app, ["config", "init"], input="my-profile\ngut-v1\n")
+            
+            # Should succeed
+            assert result.exit_code == 0
+            assert "Configuration saved" in result.output
+            
+            # Verify file was created
+            assert config_file.exists()
+            
+            # Verify content
+            from hca_smart_sync.config_manager import load_config
+            config_data = load_config(config_file)
+            assert config_data["profile"] == "my-profile"
+            assert config_data["atlas"] == "gut-v1"
+
+    def test_config_init_update_existing(self, tmp_path):
+        """Test config init updates existing configuration."""
+        config_file = tmp_path / "config.yaml"
+        
+        # Create existing config
+        from hca_smart_sync.config_manager import save_config
+        save_config(config_file, {"profile": "old-profile", "atlas": "old-atlas"})
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            # Update both values
+            result = runner.invoke(app, ["config", "init"], input="new-profile\nnew-atlas\n")
+            
+            assert result.exit_code == 0
+            assert "Configuration saved" in result.output
+            
+            # Verify updated content
+            from hca_smart_sync.config_manager import load_config
+            config_data = load_config(config_file)
+            assert config_data["profile"] == "new-profile"
+            assert config_data["atlas"] == "new-atlas"
+
+    def test_config_init_keep_existing_values(self, tmp_path):
+        """Test config init keeps values when Enter is pressed."""
+        config_file = tmp_path / "config.yaml"
+        
+        # Create existing config
+        from hca_smart_sync.config_manager import save_config
+        save_config(config_file, {"profile": "keep-profile", "atlas": "keep-atlas"})
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            # Press Enter twice to keep both values
+            result = runner.invoke(app, ["config", "init"], input="\n\n")
+            
+            assert result.exit_code == 0
+            
+            # Verify values unchanged
+            from hca_smart_sync.config_manager import load_config
+            config_data = load_config(config_file)
+            assert config_data["profile"] == "keep-profile"
+            assert config_data["atlas"] == "keep-atlas"
+
+    def test_config_init_partial_update(self, tmp_path):
+        """Test config init updates only one value."""
+        config_file = tmp_path / "config.yaml"
+        
+        # Create existing config
+        from hca_smart_sync.config_manager import save_config
+        save_config(config_file, {"profile": "old-profile", "atlas": "old-atlas"})
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            # Update profile, keep atlas
+            result = runner.invoke(app, ["config", "init"], input="new-profile\n\n")
+            
+            assert result.exit_code == 0
+            
+            # Verify partial update
+            from hca_smart_sync.config_manager import load_config
+            config_data = load_config(config_file)
+            assert config_data["profile"] == "new-profile"
+            assert config_data["atlas"] == "old-atlas"
+
+    def test_config_init_with_only_profile(self, tmp_path):
+        """Test config init with only profile (no atlas)."""
+        config_file = tmp_path / "config.yaml"
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            # Provide profile, press Enter for atlas
+            result = runner.invoke(app, ["config", "init"], input="my-profile\n\n")
+            
+            assert result.exit_code == 0
+            
+            # Verify only profile is set
+            from hca_smart_sync.config_manager import load_config
+            config_data = load_config(config_file)
+            assert config_data.get("profile") == "my-profile"
+            # Atlas should either be absent or empty
+            assert not config_data.get("atlas")
+
+    def test_config_init_with_only_atlas(self, tmp_path):
+        """Test config init with only atlas (no profile)."""
+        config_file = tmp_path / "config.yaml"
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            # Press Enter for profile, provide atlas
+            result = runner.invoke(app, ["config", "init"], input="\ngut-v1\n")
+            
+            assert result.exit_code == 0
+            
+            # Verify only atlas is set
+            from hca_smart_sync.config_manager import load_config
+            config_data = load_config(config_file)
+            assert not config_data.get("profile")
+            assert config_data.get("atlas") == "gut-v1"

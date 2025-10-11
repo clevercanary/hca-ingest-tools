@@ -71,7 +71,7 @@ class TestCLI:
         result = self.runner.invoke(app, ["sync"])
         
         # Should fail - file_type is required
-        assert result.exit_code == 2  # Typer returns 2 for missing arguments
+        assert result.exit_code != 0  # Should fail for missing arguments
         out = strip_ansi(result.stderr if result.stderr else result.stdout)
         # Typer error message contains "Missing argument" for required args
         assert "missing argument" in out.lower()

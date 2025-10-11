@@ -1,5 +1,6 @@
 """Tests for HCA Smart Sync CLI."""
 
+import contextlib
 import os
 import pytest
 import subprocess
@@ -34,30 +35,52 @@ def strip_ansi(text: str) -> str:
 
 
 @pytest.fixture
-def mock_sync_dependencies():
+def mock_sync_dependencies(tmp_path):
     """Fixture to mock common sync command dependencies.
     
     Returns mocks for commonly patched CLI internal functions.
     Tests can configure return values as needed.
+    
+    Also mocks get_config_path to isolate tests from local config file.
     """
     from contextlib import contextmanager
     
     @contextmanager
-    def _mock_deps():
-        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate, \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
-             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init:
+    def _mock_deps(mock_config_path=True):
+        """
+        Args:
+            mock_config_path: If True, mocks get_config_path to use tmp_path.
+                             If False, doesn't mock it (for tests that need real config).
+        """
+        patches = []
+        
+        # Optionally mock config path to isolate from local config
+        if mock_config_path:
+            config_file = tmp_path / "nonexistent.yaml"
+            patches.append(patch('hca_smart_sync.cli.get_config_path', return_value=config_file))
+        
+        # Always mock these CLI internal functions
+        patches.extend([
+            patch('hca_smart_sync.cli._check_aws_cli'),
+            patch('hca_smart_sync.cli._load_and_configure'),
+            patch('hca_smart_sync.cli._validate_configuration'),
+            patch('hca_smart_sync.cli._build_s3_path'),
+            patch('hca_smart_sync.cli._resolve_local_path'),
+            patch('hca_smart_sync.cli._initialize_sync_engine'),
+        ])
+        
+        with contextlib.ExitStack() as stack:
+            mocks = [stack.enter_context(p) for p in patches]
             
+            # Build return dict (skip first mock if config_path was mocked)
+            offset = 1 if mock_config_path else 0
             yield {
-                'check_aws_cli': mock_check,
-                'load_config': mock_load,
-                'validate_config': mock_validate,
-                'build_s3_path': mock_build,
-                'resolve_path': mock_resolve,
-                'init_sync': mock_init,
+                'check_aws_cli': mocks[offset],
+                'load_config': mocks[offset + 1],
+                'validate_config': mocks[offset + 2],
+                'build_s3_path': mocks[offset + 3],
+                'resolve_path': mocks[offset + 4],
+                'init_sync': mocks[offset + 5],
             }
     
     return _mock_deps
@@ -436,13 +459,9 @@ class TestAWSCLIDependencyCheck:
 class TestSyncScenarios:
     """Test sync command scenarios."""
     
-    def test_sync_no_files_found(self, tmp_path, mock_sync_dependencies):
+    def test_sync_no_files_found(self, mock_sync_dependencies):
         """Test sync command when no .h5ad files are found."""
-        # Create a non-existent config path to ensure test doesn't use local config
-        config_file = tmp_path / "nonexistent.yaml"
-        
-        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             mock_sync_dependencies() as mocks:
+        with mock_sync_dependencies() as mocks:
             
             # Configure mocks
             mocks['check_aws_cli'].return_value = True
@@ -470,13 +489,9 @@ class TestSyncScenarios:
             assert "Uploaded 0 file(s)" in result.output
             assert "Sync completed successfully" in result.output
 
-    def test_sync_all_files_up_to_date(self, tmp_path, mock_sync_dependencies):
+    def test_sync_all_files_up_to_date(self, mock_sync_dependencies):
         """Test sync command when files exist but are all up to date."""
-        # Create a non-existent config path to ensure test doesn't use local config
-        config_file = tmp_path / "nonexistent.yaml"
-        
-        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             mock_sync_dependencies() as mocks:
+        with mock_sync_dependencies() as mocks:
             
             # Configure mocks
             mocks['check_aws_cli'].return_value = True
@@ -510,13 +525,9 @@ class TestSyncScenarios:
             assert "Uploaded 0 file(s)" in result.output
             assert "Sync completed successfully" in result.output
 
-    def test_sync_single_file_up_to_date(self, tmp_path, mock_sync_dependencies):
+    def test_sync_single_file_up_to_date(self, mock_sync_dependencies):
         """Test sync command when single file exists but is up to date (singular message)."""
-        # Create a non-existent config path to ensure test doesn't use local config
-        config_file = tmp_path / "nonexistent.yaml"
-        
-        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             mock_sync_dependencies() as mocks:
+        with mock_sync_dependencies() as mocks:
             
             # Configure mocks
             mocks['check_aws_cli'].return_value = True
@@ -548,13 +559,9 @@ class TestSyncScenarios:
             assert "Uploaded 0 file(s)" in result.output
             assert "Sync completed successfully" in result.output
 
-    def test_sync_integrated_objects_file_type(self, tmp_path, mock_sync_dependencies):
+    def test_sync_integrated_objects_file_type(self, mock_sync_dependencies):
         """Test sync command with integrated-objects file type builds correct S3 path."""
-        # Create a non-existent config path to ensure test doesn't use local config
-        config_file = tmp_path / "nonexistent.yaml"
-        
-        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             mock_sync_dependencies() as mocks:
+        with mock_sync_dependencies() as mocks:
             
             # Configure mocks
             mocks['check_aws_cli'].return_value = True
@@ -792,7 +799,7 @@ class TestSyncWithConfigDefaults:
         save_config(config_file, {"profile": "config-profile", "atlas": "gut-v1"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             mock_sync_dependencies() as mocks:
+             mock_sync_dependencies(mock_config_path=False) as mocks:
             
             # Configure mocks
             mocks['check_aws_cli'].return_value = True
@@ -829,7 +836,7 @@ class TestSyncWithConfigDefaults:
         save_config(config_file, {"profile": "config-profile"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             mock_sync_dependencies() as mocks:
+             mock_sync_dependencies(mock_config_path=False) as mocks:
             
             # Configure mocks
             mocks['check_aws_cli'].return_value = True
@@ -866,7 +873,7 @@ class TestSyncWithConfigDefaults:
         save_config(config_file, {"atlas": "immune-v1"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             mock_sync_dependencies() as mocks:
+             mock_sync_dependencies(mock_config_path=False) as mocks:
             
             # Configure mocks
             mocks['check_aws_cli'].return_value = True

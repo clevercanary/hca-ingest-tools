@@ -67,11 +67,11 @@ class TestCLI:
         assert "--verbose" in out
     
     def test_sync_command_missing_args(self):
-        """Test sync command with missing required file_type argument fails."""
+        """Test sync command fails when called with no arguments."""
         result = self.runner.invoke(app, ["sync"])
         
-        # Should fail - file_type is required
-        assert result.exit_code != 0  # Should fail for missing arguments
+        # Should fail - required argument missing
+        assert result.exit_code != 0
         out = strip_ansi(result.stderr if result.stderr else result.stdout)
         # Typer error message contains "Missing argument" for required args
         assert "missing argument" in out.lower()
@@ -133,17 +133,6 @@ class TestCLI:
                 error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
                 assert "is not one of" not in error_output
                 assert "Invalid value for '--environment'" not in error_output
-    
-    def test_sync_command_requires_file_type(self):
-        """Test sync command requires file_type argument."""
-        # file_type is now required, so omitting it should fail
-        result = self.runner.invoke(app, ["sync"])
-        
-        # Should fail - file_type is required
-        assert result.exit_code != 0
-        error_output = result.stderr if result.stderr else result.stdout
-        # Typer error message contains "Missing argument" for required args
-        assert "missing argument" in error_output.lower()
     
     def test_sync_command_with_invalid_file_type(self):
         """Test sync command with invalid file_type value."""

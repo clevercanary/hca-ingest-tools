@@ -28,8 +28,39 @@ from hca_smart_sync.cli import (
 # Helper: strip ANSI escape sequences from CLI output for stable assertions
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
-def strip_ansi(s: str) -> str:
-    return ANSI_RE.sub("", s)
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    return ANSI_RE.sub("", text)
+
+
+@pytest.fixture
+def mock_sync_dependencies():
+    """Fixture to mock common sync command dependencies.
+    
+    Returns mocks for commonly patched CLI internal functions.
+    Tests can configure return values as needed.
+    """
+    from contextlib import contextmanager
+    
+    @contextmanager
+    def _mock_deps():
+        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check, \
+             patch('hca_smart_sync.cli._load_and_configure') as mock_load, \
+             patch('hca_smart_sync.cli._validate_configuration') as mock_validate, \
+             patch('hca_smart_sync.cli._build_s3_path') as mock_build, \
+             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
+             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init:
+            
+            yield {
+                'check_aws_cli': mock_check,
+                'load_config': mock_load,
+                'validate_config': mock_validate,
+                'build_s3_path': mock_build,
+                'resolve_path': mock_resolve,
+                'init_sync': mock_init,
+            }
+    
+    return _mock_deps
 
 
 class TestCLI:
@@ -400,25 +431,17 @@ class TestAWSCLIDependencyCheck:
 class TestSyncScenarios:
     """Test sync command scenarios."""
     
-    def test_sync_no_files_found(self):
+    def test_sync_no_files_found(self, mock_sync_dependencies):
         """Test sync command when no .h5ad files are found."""
-        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
-             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+        with mock_sync_dependencies() as mocks:
             
-            # Mock AWS CLI available
-            mock_check_aws_cli.return_value = True
-            
-            # Mock config and paths
+            # Configure mocks
+            mocks['check_aws_cli'].return_value = True
             mock_config = Mock()
             mock_config.s3.bucket_name = "test-bucket"
-            mock_load_config.return_value = mock_config
-            mock_validate_config.return_value = None
-            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
-            mock_resolve_local_path.return_value = "/test/path"
+            mocks['load_config'].return_value = mock_config
+            mocks['build_s3_path'].return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mocks['resolve_path'].return_value = "/test/path"
             
             # Mock sync engine to return no files found
             mock_sync_engine = Mock()
@@ -428,7 +451,7 @@ class TestSyncScenarios:
                 "manifest_path": None,
                 "no_files_found": True
             }
-            mock_init_sync.return_value = mock_sync_engine
+            mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
             result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
@@ -438,25 +461,17 @@ class TestSyncScenarios:
             assert "Uploaded 0 file(s)" in result.output
             assert "Sync completed successfully" in result.output
 
-    def test_sync_all_files_up_to_date(self):
+    def test_sync_all_files_up_to_date(self, mock_sync_dependencies):
         """Test sync command when files exist but are all up to date."""
-        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
-             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+        with mock_sync_dependencies() as mocks:
             
-            # Mock AWS CLI available
-            mock_check_aws_cli.return_value = True
-            
-            # Mock config and paths
+            # Configure mocks
+            mocks['check_aws_cli'].return_value = True
             mock_config = Mock()
             mock_config.s3.bucket_name = "test-bucket"
-            mock_load_config.return_value = mock_config
-            mock_validate_config.return_value = None
-            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
-            mock_resolve_local_path.return_value = "/test/path"
+            mocks['load_config'].return_value = mock_config
+            mocks['build_s3_path'].return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mocks['resolve_path'].return_value = "/test/path"
             
             # Mock sync engine to return files found but all up to date
             mock_local_files = [
@@ -472,7 +487,7 @@ class TestSyncScenarios:
                 "local_files": mock_local_files,
                 "all_up_to_date": True
             }
-            mock_init_sync.return_value = mock_sync_engine
+            mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
             result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
@@ -482,25 +497,17 @@ class TestSyncScenarios:
             assert "Uploaded 0 file(s)" in result.output
             assert "Sync completed successfully" in result.output
 
-    def test_sync_single_file_up_to_date(self):
+    def test_sync_single_file_up_to_date(self, mock_sync_dependencies):
         """Test sync command when single file exists but is up to date (singular message)."""
-        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
-             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+        with mock_sync_dependencies() as mocks:
             
-            # Mock AWS CLI available
-            mock_check_aws_cli.return_value = True
-            
-            # Mock config and paths
+            # Configure mocks
+            mocks['check_aws_cli'].return_value = True
             mock_config = Mock()
             mock_config.s3.bucket_name = "test-bucket"
-            mock_load_config.return_value = mock_config
-            mock_validate_config.return_value = None
-            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
-            mock_resolve_local_path.return_value = "/test/path"
+            mocks['load_config'].return_value = mock_config
+            mocks['build_s3_path'].return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mocks['resolve_path'].return_value = "/test/path"
             
             # Mock sync engine to return single file up to date
             mock_local_files = [
@@ -514,7 +521,7 @@ class TestSyncScenarios:
                 "local_files": mock_local_files,
                 "all_up_to_date": True
             }
-            mock_init_sync.return_value = mock_sync_engine
+            mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
             result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
@@ -524,29 +531,21 @@ class TestSyncScenarios:
             assert "Uploaded 0 file(s)" in result.output
             assert "Sync completed successfully" in result.output
 
-    def test_sync_integrated_objects_file_type(self):
+    def test_sync_integrated_objects_file_type(self, mock_sync_dependencies):
         """Test sync command with integrated-objects file type builds correct S3 path."""
-        with patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration') as mock_validate_config, \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3_path, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve_local_path, \
-             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+        with mock_sync_dependencies() as mocks:
             
-            # Mock AWS CLI available
-            mock_check_aws_cli.return_value = True
-            
-            # Mock config
+            # Configure mocks
+            mocks['check_aws_cli'].return_value = True
             mock_config = Mock()
-            mock_load_config.return_value = mock_config
-            mock_validate_config.return_value = None
-            mock_build_s3_path.return_value = "s3://test-bucket/gut/gut-v1/integrated-objects/"
-            mock_resolve_local_path.return_value = "/test/path"
+            mocks['load_config'].return_value = mock_config
+            mocks['build_s3_path'].return_value = "s3://test-bucket/gut/gut-v1/integrated-objects/"
+            mocks['resolve_path'].return_value = "/test/path"
             
             # Mock sync engine to avoid real AWS calls
             mock_sync_engine = Mock()
             mock_sync_engine.sync.return_value = {"files_uploaded": 0, "files_to_upload": []}
-            mock_init_sync.return_value = mock_sync_engine
+            mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
             result = runner.invoke(app, ["sync", "integrated-objects", "gut-v1", "--profile", "test"])
@@ -555,8 +554,8 @@ class TestSyncScenarios:
             assert result.exit_code == 0
             
             # Verify that _build_s3_path was called with "integrated-objects" folder
-            mock_build_s3_path.assert_called_once()
-            call_args = mock_build_s3_path.call_args
+            mocks['build_s3_path'].assert_called_once()
+            call_args = mocks['build_s3_path'].call_args
             assert call_args[0][2] == "integrated-objects"  # Third positional arg is folder
             
             # Verify sync engine was actually invoked
@@ -763,7 +762,7 @@ class TestConfigInit:
 class TestSyncWithConfigDefaults:
     """Tests for sync command using config file defaults."""
 
-    def test_sync_uses_config_profile(self, tmp_path):
+    def test_sync_uses_config_profile(self, tmp_path, mock_sync_dependencies):
         """Test that sync uses profile from config when not specified."""
         config_file = tmp_path / "config.yaml"
         
@@ -772,19 +771,15 @@ class TestSyncWithConfigDefaults:
         save_config(config_file, {"profile": "config-profile", "atlas": "gut-v1"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration'), \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
-             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+             mock_sync_dependencies() as mocks:
             
-            mock_check_aws_cli.return_value = True
+            # Configure mocks
+            mocks['check_aws_cli'].return_value = True
             mock_config = Mock()
             mock_config.s3.bucket_name = "test-bucket"
-            mock_load_config.return_value = mock_config
-            mock_build_s3.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
-            mock_resolve.return_value = "/test/path"
+            mocks['load_config'].return_value = mock_config
+            mocks['build_s3_path'].return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mocks['resolve_path'].return_value = "/test/path"
             
             mock_sync_engine = Mock()
             mock_sync_engine.sync.return_value = {
@@ -793,7 +788,7 @@ class TestSyncWithConfigDefaults:
                 "manifest_path": None,
                 "no_files_found": True
             }
-            mock_init_sync.return_value = mock_sync_engine
+            mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
             # Don't specify --profile, should use config default
@@ -801,10 +796,10 @@ class TestSyncWithConfigDefaults:
             
             assert result.exit_code == 0
             # Verify profile from config was passed to _load_and_configure
-            mock_load_config.assert_called_once()
-            assert mock_load_config.call_args[0][0] == "config-profile"
+            mocks['load_config'].assert_called_once()
+            assert mocks['load_config'].call_args[0][0] == "config-profile"
 
-    def test_sync_cli_profile_overrides_config(self, tmp_path):
+    def test_sync_cli_profile_overrides_config(self, tmp_path, mock_sync_dependencies):
         """Test that CLI --profile overrides config file."""
         config_file = tmp_path / "config.yaml"
         
@@ -813,19 +808,15 @@ class TestSyncWithConfigDefaults:
         save_config(config_file, {"profile": "config-profile"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration'), \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
-             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+             mock_sync_dependencies() as mocks:
             
-            mock_check_aws_cli.return_value = True
+            # Configure mocks
+            mocks['check_aws_cli'].return_value = True
             mock_config = Mock()
             mock_config.s3.bucket_name = "test-bucket"
-            mock_load_config.return_value = mock_config
-            mock_build_s3.return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
-            mock_resolve.return_value = "/test/path"
+            mocks['load_config'].return_value = mock_config
+            mocks['build_s3_path'].return_value = "s3://test-bucket/gut/gut-v1/source-datasets/"
+            mocks['resolve_path'].return_value = "/test/path"
             
             mock_sync_engine = Mock()
             mock_sync_engine.sync.return_value = {
@@ -834,7 +825,7 @@ class TestSyncWithConfigDefaults:
                 "manifest_path": None,
                 "no_files_found": True
             }
-            mock_init_sync.return_value = mock_sync_engine
+            mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
             # Specify --profile, should override config
@@ -842,10 +833,10 @@ class TestSyncWithConfigDefaults:
             
             assert result.exit_code == 0
             # Verify CLI profile was used
-            mock_load_config.assert_called_once()
-            assert mock_load_config.call_args[0][0] == "cli-profile"
+            mocks['load_config'].assert_called_once()
+            assert mocks['load_config'].call_args[0][0] == "cli-profile"
 
-    def test_sync_uses_config_atlas_as_default(self, tmp_path):
+    def test_sync_uses_config_atlas_as_default(self, tmp_path, mock_sync_dependencies):
         """Test that sync uses atlas from config when not specified."""
         config_file = tmp_path / "config.yaml"
         
@@ -854,19 +845,15 @@ class TestSyncWithConfigDefaults:
         save_config(config_file, {"atlas": "immune-v1"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file), \
-             patch('hca_smart_sync.cli._check_aws_cli') as mock_check_aws_cli, \
-             patch('hca_smart_sync.cli._load_and_configure') as mock_load_config, \
-             patch('hca_smart_sync.cli._validate_configuration'), \
-             patch('hca_smart_sync.cli._build_s3_path') as mock_build_s3, \
-             patch('hca_smart_sync.cli._resolve_local_path') as mock_resolve, \
-             patch('hca_smart_sync.cli._initialize_sync_engine') as mock_init_sync:
+             mock_sync_dependencies() as mocks:
             
-            mock_check_aws_cli.return_value = True
+            # Configure mocks
+            mocks['check_aws_cli'].return_value = True
             mock_config = Mock()
             mock_config.s3.bucket_name = "test-bucket"
-            mock_load_config.return_value = mock_config
-            mock_build_s3.return_value = "s3://test-bucket/immune/immune-v1/source-datasets/"
-            mock_resolve.return_value = "/test/path"
+            mocks['load_config'].return_value = mock_config
+            mocks['build_s3_path'].return_value = "s3://test-bucket/immune/immune-v1/source-datasets/"
+            mocks['resolve_path'].return_value = "/test/path"
             
             mock_sync_engine = Mock()
             mock_sync_engine.sync.return_value = {
@@ -875,7 +862,7 @@ class TestSyncWithConfigDefaults:
                 "manifest_path": None,
                 "no_files_found": True
             }
-            mock_init_sync.return_value = mock_sync_engine
+            mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
             # Don't specify atlas, should use config default
@@ -883,10 +870,10 @@ class TestSyncWithConfigDefaults:
             
             assert result.exit_code == 0
             # Verify atlas from config was used in s3 path
-            mock_build_s3.assert_called_once()
-            assert mock_build_s3.call_args[0][1] == "immune-v1"
+            mocks['build_s3_path'].assert_called_once()
+            assert mocks['build_s3_path'].call_args[0][1] == "immune-v1"
             # Verify default file_type (source-datasets) was used
-            assert mock_build_s3.call_args[0][2] == "source-datasets"
+            assert mocks['build_s3_path'].call_args[0][2] == "source-datasets"
 
     def test_sync_no_config_requires_atlas(self, tmp_path):
         """Test that sync requires atlas arg when no config exists."""

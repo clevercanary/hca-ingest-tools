@@ -38,62 +38,115 @@ aws configure --profile your-profile-name
 #   Default output format: json
 ```
 
-### 2. Basic Upload
+### 2. Set Up Smart-Sync Defaults (Recommended)
+
+```bash
+# Initialize config with your default profile and atlas
+hca-smart-sync config init
+# Enter: AWS profile name
+# Enter: Default atlas (e.g., gut-v1)
+
+# View your config
+hca-smart-sync config show
+```
+
+### 3. Basic Upload
 
 ```bash
 # Navigate to your data directory
 cd /path/to/your/h5ad/files
 
-# Run sync with required arguments (atlas and file type)
+# Atlas first, then file type
 hca-smart-sync sync gut-v1 source-datasets --profile your-profile-name
 
+# Or use config defaults (no atlas or profile needed)
+hca-smart-sync sync source-datasets
+
 # Or specify a different directory
-hca-smart-sync sync gut-v1 source-datasets --profile your-profile-name --local-path /data/gut/
+hca-smart-sync sync gut-v1 source-datasets --local-path /data/gut/
 ```
 
 ## Command Reference
+
+### `hca-smart-sync config init`
+
+Initialize or update configuration with default values.
+
+```bash
+hca-smart-sync config init
+```
+
+**Interactive prompts:**
+- AWS profile name (leave empty to keep current)
+- Default atlas name (leave empty to keep current)
+
+**Example:**
+```bash
+hca-smart-sync config init
+# AWS profile [current: excira]: my-profile
+# Default atlas [current: gut-v1]: immune-v1
+```
+
+### `hca-smart-sync config show`
+
+Display current configuration.
+
+```bash
+hca-smart-sync config show
+```
 
 ### `hca-smart-sync sync`
 
 Upload .h5ad files to S3 with checksum-based synchronization.
 
 ```bash
-hca-smart-sync sync ATLAS FILE_TYPE [OPTIONS]
+hca-smart-sync sync [ATLAS] [FILE_TYPE] [OPTIONS]
 ```
 
-**Arguments:**
+**Arguments (flexible order):**
 
-- `ATLAS`: Atlas name (e.g., `gut-v1`, `immune-v1`, `adipose-v1`)
-- `FILE_TYPE`: File type - either `source-datasets` or `integrated-objects`
+- `ATLAS`: Atlas name (e.g., `gut-v1`, `immune-v1`) - optional if set in config
+- `FILE_TYPE`: `source-datasets` or `integrated-objects` - **always required**
 
-**Required Options:**
+**The tool intelligently detects which argument is which:**
+- If first arg is `source-datasets` or `integrated-objects`, it's treated as file type (atlas from config)
+- Otherwise, first arg is atlas, second arg must be file type
 
-- `--profile NAME`: AWS profile to use (required)
+**Options:**
 
-**Optional Arguments:**
-
+- `--profile NAME`: AWS profile to use (uses config default if not specified)
 - `--local-path PATH`: Directory to scan for files (default: current directory)
 - `--dry-run`: Show what would be uploaded without uploading
 - `--force`: Upload all files even if unchanged
 - `--verbose`: Show detailed output
+- `--environment [prod|dev]`: Target environment (default: prod)
 
 **Examples:**
 
 ```bash
-# Upload source datasets to production
+# Atlas first, file type second
 hca-smart-sync sync gut-v1 source-datasets --profile my-profile
 
-# Upload integrated objects to production
-hca-smart-sync sync gut-v1 integrated-objects --profile my-profile
+# File type only (uses config for atlas and profile)
+hca-smart-sync sync source-datasets
+
+# Upload integrated objects with config defaults
+hca-smart-sync sync integrated-objects
+
+# Override config atlas but use config profile
+hca-smart-sync sync immune-v1 source-datasets
 
 # Dry run to preview changes
-hca-smart-sync sync gut-v1 source-datasets --profile my-profile --dry-run
+hca-smart-sync sync gut-v1 source-datasets --dry-run
 
 # Upload from specific directory
-hca-smart-sync sync immune-v1 source-datasets --profile my-profile --local-path /data/immune/batch1
+hca-smart-sync sync immune-v1 source-datasets --local-path /data/immune/batch1
 
 # Force upload even for unchanged files
-hca-smart-sync sync adipose-v1 integrated-objects --profile my-profile --force
+hca-smart-sync sync adipose-v1 integrated-objects --force
+
+# Upload to dev environment
+hca-smart-sync sync gut-v1 source-datasets --environment dev
 ```
 
 ## How It Works
@@ -190,11 +243,55 @@ If your S3 bucket has transfer acceleration enabled, smart-sync automatically us
 }
 ```
 
+## Configuration Management
+
+### Config File Location
+
+The config file is stored at `~/.hca-smart-sync/config.yaml`
+
+### Config File Format
+
+```yaml
+profile: my-aws-profile
+atlas: gut-v1
+```
+
+### Precedence Rules
+
+1. **CLI arguments** (highest priority)
+2. **Config file defaults**
+3. **Built-in defaults** (lowest priority)
+
+For example:
+```bash
+hca-smart-sync sync immune-v1 --profile cli-profile
+```
+Will use `immune-v1` (from CLI) and `cli-profile` (from CLI), ignoring config values.
+
+```bash
+hca-smart-sync sync source-datasets
+```
+Will use `source-datasets` (from CLI) and load atlas + profile from config.
+
 ## Troubleshooting
 
 ### Common Issues
 
-#### 1. AWS Credentials Not Found
+#### 1. Atlas Required Error
+
+```
+Error: Atlas is required.
+```
+
+**Solution**: Either provide atlas as argument or set default in config:
+
+```bash
+hca-smart-sync config init
+# or
+hca-smart-sync sync gut-v1 source-datasets
+```
+
+#### 2. AWS Credentials Not Found
 
 ```
 Error: Unable to locate credentials
@@ -204,11 +301,13 @@ Error: Unable to locate credentials
 
 ```bash
 aws configure --profile your-profile
+# or set default in config
+hca-smart-sync config init
 # or
 export AWS_PROFILE=your-profile
 ```
 
-#### 2. S3 Access Denied
+#### 3. S3 Access Denied
 
 ```
 Error: Access denied to bucket 'your-bucket'
@@ -220,7 +319,7 @@ Error: Access denied to bucket 'your-bucket'
 - `s3:GetObject` and `s3:PutObject` on objects
 - `s3:PutObjectMetadata` for checksum storage
 
-#### 3. No .h5ad Files Found
+#### 4. No .h5ad Files Found
 
 ```
 No .h5ad files found in directory
@@ -232,7 +331,7 @@ No .h5ad files found in directory
 - Use `--local-path` to specify the data directory
 - Verify files have `.h5ad` extension
 
-#### 4. Upload Interrupted
+#### 5. Upload Interrupted
 
 If upload is interrupted (Ctrl+C), you'll have:
 

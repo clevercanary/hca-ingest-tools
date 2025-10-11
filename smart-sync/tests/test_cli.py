@@ -97,15 +97,19 @@ class TestCLI:
         assert "--dry-run" in out
         assert "--verbose" in out
     
-    def test_sync_command_missing_args(self):
-        """Test sync command fails when called with no arguments."""
-        result = self.runner.invoke(app, ["sync"])
+    def test_sync_command_missing_args(self, tmp_path):
+        """Test sync command requires file type when called with no arguments."""
+        # Create path to non-existent config
+        config_file = tmp_path / "nonexistent.yaml"
         
-        # Should fail - required argument missing
-        assert result.exit_code != 0
-        out = strip_ansi(result.stderr if result.stderr else result.stdout)
-        # Typer error message contains "Missing argument" for required args
-        assert "missing argument" in out.lower()
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            result = self.runner.invoke(app, ["sync"])
+            
+            # Should fail - file type always required
+            assert result.exit_code != 0
+            out = strip_ansi(result.stderr if result.stderr else result.stdout)
+            # Should show helpful error about file type being required
+            assert "file type" in out.lower() and "required" in out.lower()
     
     def test_sync_command_with_invalid_atlas(self):
         """Test sync command with invalid atlas name."""
@@ -116,7 +120,7 @@ class TestCLI:
             mock_init.return_value = mock_sync_engine
             
             # Test with an atlas that would likely fail validation
-            result = self.runner.invoke(app, ["sync", "source-datasets", "invalid-atlas-name", "--dry-run"])
+            result = self.runner.invoke(app, ["sync", "invalid-atlas-name", "source-datasets", "--dry-run"])
             
             # Should either fail or show some error (depending on validation)
             # This test mainly ensures the command structure works
@@ -125,7 +129,7 @@ class TestCLI:
     def test_sync_command_with_invalid_environment(self):
         """Test sync command with invalid environment value."""
         # Test with invalid environment value - should be rejected by Typer enum validation
-        result = self.runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--environment", "devv", "--dry-run"])
+        result = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "devv", "--dry-run"])
         
         # Should fail due to invalid environment enum value
         assert result.exit_code != 0
@@ -149,7 +153,7 @@ class TestCLI:
             # Note: These may still fail later due to AWS access, but enum validation should pass
             
             # Test prod environment
-            result_prod = self.runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--environment", "prod", "--dry-run"])
+            result_prod = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "prod", "--dry-run"])
             # Should not fail due to enum validation (may fail later for other reasons)
             # If it fails, it shouldn't be due to invalid enum value
             if result_prod.exit_code != 0:
@@ -158,7 +162,7 @@ class TestCLI:
                 assert "Invalid value for '--environment'" not in error_output
             
             # Test dev environment  
-            result_dev = self.runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--environment", "dev", "--dry-run"])
+            result_dev = self.runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--environment", "dev", "--dry-run"])
             # Should not fail due to enum validation (may fail later for other reasons)
             if result_dev.exit_code != 0:
                 error_output = result_dev.stderr if result_dev.stderr else result_dev.stdout
@@ -167,13 +171,14 @@ class TestCLI:
     
     def test_sync_command_with_invalid_file_type(self):
         """Test sync command with invalid file_type value."""
-        result = self.runner.invoke(app, ["sync", "invalid-folder-type", "gut-v1", "--dry-run"])
+        # Atlas first, then invalid file type
+        result = self.runner.invoke(app, ["sync", "gut-v1", "invalid-folder-type", "--dry-run"])
         
-        # Should fail due to invalid file_type enum value
+        # Should fail due to invalid file_type value
         assert result.exit_code != 0
-        # Check that error message mentions valid choices
+        # Check that error message mentions the file types or unrecognized
         error_output = result.stderr if result.stderr else result.stdout
-        assert "is not one of" in error_output or "Invalid value" in error_output
+        assert "unrecognized" in error_output.lower() or "source-datasets" in error_output.lower()
 
 
 class TestHelperFunctions:
@@ -454,7 +459,7 @@ class TestSyncScenarios:
             mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "No .h5ad files found in directory" in result.output
@@ -490,7 +495,7 @@ class TestSyncScenarios:
             mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "Found 3 .h5ad files - all up to date" in result.output
@@ -524,7 +529,7 @@ class TestSyncScenarios:
             mocks['init_sync'].return_value = mock_sync_engine
             
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "test"])
+            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "test"])
             
             assert result.exit_code == 0
             assert "Found 1 .h5ad file - all up to date" in result.output  # Singular "file"
@@ -792,7 +797,7 @@ class TestSyncWithConfigDefaults:
             
             runner = CliRunner()
             # Don't specify --profile, should use config default
-            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1"])
+            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets"])
             
             assert result.exit_code == 0
             # Verify profile from config was passed to _load_and_configure
@@ -829,7 +834,7 @@ class TestSyncWithConfigDefaults:
             
             runner = CliRunner()
             # Specify --profile, should override config
-            result = runner.invoke(app, ["sync", "source-datasets", "gut-v1", "--profile", "cli-profile"])
+            result = runner.invoke(app, ["sync", "gut-v1", "source-datasets", "--profile", "cli-profile"])
             
             assert result.exit_code == 0
             # Verify CLI profile was used

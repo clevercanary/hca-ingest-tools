@@ -238,8 +238,8 @@ class FileType(str, Enum):
 
 @app.command()
 def sync(
-    file_type: Annotated[FileType, typer.Argument(help="File type: source-datasets or integrated-objects")],
-    atlas: Annotated[Optional[str], typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1) - uses config default if not specified")] = None,
+    arg1: Annotated[Optional[str], typer.Argument(help="Atlas name or file type")] = None,
+    arg2: Annotated[Optional[str], typer.Argument(help="File type (if atlas provided first)")] = None,
     dry_run: Annotated[bool, typer.Option(help="Dry run mode")] = False,
     verbose: Annotated[bool, typer.Option(help="Verbose output")] = False,
     profile: Annotated[Optional[str], typer.Option(help="AWS profile - uses config default if not specified")] = None,
@@ -247,7 +247,12 @@ def sync(
     force: Annotated[bool, typer.Option(help="Force upload")] = False,
     local_path: Annotated[Optional[str], typer.Option(help="Local directory to scan (defaults to current directory)")] = None,
 ) -> None:
-    """Sync .h5ad files from local directory to S3."""
+    """Sync .h5ad files from local directory to S3.
+    
+    Usage examples:
+      hca-smart-sync sync gut-v1 source-datasets        # Atlas first, then file type
+      hca-smart-sync sync source-datasets               # File type only (uses config atlas)
+    """
     
     # Load user config file for defaults
     config_path = get_config_path()
@@ -260,13 +265,58 @@ def sync(
     if user_config is None:
         user_config = {}
     
-    # Use config defaults if not provided via CLI
+    # Smart detection: figure out which arg is atlas and which is file_type
+    KNOWN_FILE_TYPES = {'source-datasets', 'integrated-objects'}
+    atlas: Optional[str] = None
+    file_type_str: Optional[str] = None
+    
+    if arg1 in KNOWN_FILE_TYPES:
+        # Case 1: "sync source-datasets" - file_type provided, get atlas from config
+        file_type_str = arg1
+        atlas = user_config.get('atlas')
+        if arg2:
+            console.print("[yellow]Warning: Second argument ignored when file type is provided first[/yellow]")
+    elif arg2 in KNOWN_FILE_TYPES:
+        # Case 2: "sync gut-v1 source-datasets" - atlas first, file type second
+        atlas = arg1
+        file_type_str = arg2
+    elif arg1 and not arg2:
+        # Case 3: Only one arg provided and it's not a known file type
+        console.print(f"[red]✗ Error: File type required when providing atlas '{arg1}'[/red]")
+        console.print(f"[dim]Valid file types: {', '.join(KNOWN_FILE_TYPES)}[/dim]")
+        console.print("\nUsage examples:")
+        console.print(f"  hca-smart-sync sync {arg1} source-datasets")
+        console.print(f"  hca-smart-sync sync {arg1} integrated-objects")
+        raise typer.Exit(1)
+    elif arg1 and arg2:
+        # Case 4: "sync something something" - neither is a known file type
+        console.print(f"[red]✗ Error: Unrecognized file type. Must be one of: {', '.join(KNOWN_FILE_TYPES)}[/red]")
+        console.print(f"[dim]Got: arg1='{arg1}', arg2='{arg2}'[/dim]")
+        raise typer.Exit(1)
+    else:
+        # Case 5: No arguments at all - require file type
+        console.print("[red]✗ Error: File type required[/red]")
+        console.print(f"[dim]Valid file types: {', '.join(KNOWN_FILE_TYPES)}[/dim]")
+        console.print("\nUsage examples:")
+        console.print("  hca-smart-sync sync source-datasets")
+        console.print("  hca-smart-sync sync integrated-objects")
+        if user_config.get('atlas'):
+            console.print(f"  hca-smart-sync sync {user_config.get('atlas')} source-datasets")
+        raise typer.Exit(1)
+    
+    # Convert file_type string to enum
+    try:
+        file_type = FileType(file_type_str)
+    except ValueError:
+        console.print(f"[red]✗ Error: Invalid file type '{file_type_str}'[/red]")
+        raise typer.Exit(1)
+    
+    # Use config defaults if not already set
     if profile is None and "profile" in user_config:
         profile = user_config["profile"]
         console.print(f"[dim]Using profile from config: {profile}[/dim]")
     
-    if atlas is None and "atlas" in user_config:
-        atlas = user_config["atlas"]
+    if atlas and user_config.get('atlas') and atlas == user_config['atlas']:
         console.print(f"[dim]Using atlas from config: {atlas}[/dim]")
     
     # Validate atlas is provided

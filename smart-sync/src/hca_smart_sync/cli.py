@@ -266,7 +266,8 @@ def sync(
         user_config = {}
     
     # Smart detection: figure out which arg is atlas and which is file_type
-    KNOWN_FILE_TYPES = {'source-datasets', 'integrated-objects'}
+    # Derive valid file types from enum to maintain single source of truth
+    KNOWN_FILE_TYPES = {ft.value for ft in FileType}
     atlas: Optional[str] = None
     file_type_str: Optional[str] = None
     

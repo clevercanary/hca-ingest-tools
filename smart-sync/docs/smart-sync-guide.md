@@ -100,7 +100,7 @@ hca-smart-sync config show
 Upload .h5ad files to S3 with checksum-based synchronization.
 
 ```bash
-hca-smart-sync sync [ATLAS] [FILE_TYPE] [OPTIONS]
+hca-smart-sync sync [ATLAS] FILE_TYPE [OPTIONS]
 ```
 
 **Arguments (flexible order):**

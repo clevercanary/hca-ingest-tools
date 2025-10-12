@@ -4,7 +4,7 @@ import os
 import subprocess
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from typing_extensions import Annotated
 from typing import List, Dict
 
@@ -195,6 +195,73 @@ def _initialize_sync_engine(config: Config, profile: Optional[str], console: Con
     
     return SmartSync(config, console=console)
 
+def _parse_sync_arguments(
+    arg1: Optional[str], 
+    arg2: Optional[str], 
+    user_config: Dict[str, Any]
+) -> tuple[Optional[str], Optional[str], bool]:
+    """Parse sync command arguments to determine atlas and file type.
+    
+    Supports two usage patterns:
+    1. "sync <file_type>" - uses atlas from config
+    2. "sync <atlas> <file_type>" - explicit atlas and file type
+    
+    Args:
+        arg1: First positional argument (atlas or file type)
+        arg2: Second positional argument (file type if arg1 is atlas)
+        user_config: User configuration dictionary
+        
+    Returns:
+        Tuple of (atlas, file_type_str, atlas_from_config)
+        
+    Raises:
+        typer.Exit: If arguments are invalid
+    """
+    # Derive valid file types from enum to maintain single source of truth
+    KNOWN_FILE_TYPES = {ft.value for ft in FileType}
+    
+    if arg1 in KNOWN_FILE_TYPES:
+        # Case 1: "sync source-datasets" - file_type provided, get atlas from config
+        if arg2:
+            # User provided two args when file type came first - they're confused about syntax
+            console.print("[red]✗ Error: When file type is specified first, no second argument is allowed[/red]")
+            console.print(f"[dim]You provided: file_type='{arg1}', unexpected='{arg2}'[/dim]")
+            console.print("\nCorrect usage:")
+            console.print(f"  hca-smart-sync sync {arg1}              # Uses atlas from config")
+            console.print(f"  hca-smart-sync sync <atlas> {arg1}      # Specify both atlas and file type")
+            raise typer.Exit(1)
+        return user_config.get('atlas'), arg1, True
+        
+    elif arg2 in KNOWN_FILE_TYPES:
+        # Case 2: "sync gut-v1 source-datasets" - atlas first, file type second
+        return arg1, arg2, False
+        
+    elif arg1 and not arg2:
+        # Case 3: Only one arg provided and it's not a known file type
+        console.print(f"[red]✗ Error: File type required when providing atlas '{arg1}'[/red]")
+        console.print(f"[dim]Valid file types: {', '.join(KNOWN_FILE_TYPES)}[/dim]")
+        console.print("\nUsage examples:")
+        console.print(f"  hca-smart-sync sync {arg1} source-datasets")
+        console.print(f"  hca-smart-sync sync {arg1} integrated-objects")
+        raise typer.Exit(1)
+        
+    elif arg1 and arg2:
+        # Case 4: "sync something something" - neither is a known file type
+        console.print(f"[red]✗ Error: Unrecognized file type. Must be one of: {', '.join(KNOWN_FILE_TYPES)}[/red]")
+        console.print(f"[dim]Got: arg1='{arg1}', arg2='{arg2}'[/dim]")
+        raise typer.Exit(1)
+        
+    else:
+        # Case 5: No arguments at all - require file type
+        console.print("[red]✗ Error: File type required[/red]")
+        console.print(f"[dim]Valid file types: {', '.join(KNOWN_FILE_TYPES)}[/dim]")
+        console.print("\nUsage examples:")
+        console.print("  hca-smart-sync sync source-datasets")
+        console.print("  hca-smart-sync sync integrated-objects")
+        if user_config.get('atlas'):
+            console.print(f"  hca-smart-sync sync {user_config.get('atlas')} source-datasets")
+        raise typer.Exit(1)
+
 def _check_aws_cli() -> bool:
     """Check if AWS CLI is installed and accessible."""
     try:
@@ -265,45 +332,8 @@ def sync(
     if user_config is None:
         user_config = {}
     
-    # Smart detection: figure out which arg is atlas and which is file_type
-    # Derive valid file types from enum to maintain single source of truth
-    KNOWN_FILE_TYPES = {ft.value for ft in FileType}
-    atlas: Optional[str] = None
-    file_type_str: Optional[str] = None
-    
-    if arg1 in KNOWN_FILE_TYPES:
-        # Case 1: "sync source-datasets" - file_type provided, get atlas from config
-        file_type_str = arg1
-        atlas = user_config.get('atlas')
-        if arg2:
-            console.print("[yellow]Warning: Second argument ignored when file type is provided first[/yellow]")
-    elif arg2 in KNOWN_FILE_TYPES:
-        # Case 2: "sync gut-v1 source-datasets" - atlas first, file type second
-        atlas = arg1
-        file_type_str = arg2
-    elif arg1 and not arg2:
-        # Case 3: Only one arg provided and it's not a known file type
-        console.print(f"[red]✗ Error: File type required when providing atlas '{arg1}'[/red]")
-        console.print(f"[dim]Valid file types: {', '.join(KNOWN_FILE_TYPES)}[/dim]")
-        console.print("\nUsage examples:")
-        console.print(f"  hca-smart-sync sync {arg1} source-datasets")
-        console.print(f"  hca-smart-sync sync {arg1} integrated-objects")
-        raise typer.Exit(1)
-    elif arg1 and arg2:
-        # Case 4: "sync something something" - neither is a known file type
-        console.print(f"[red]✗ Error: Unrecognized file type. Must be one of: {', '.join(KNOWN_FILE_TYPES)}[/red]")
-        console.print(f"[dim]Got: arg1='{arg1}', arg2='{arg2}'[/dim]")
-        raise typer.Exit(1)
-    else:
-        # Case 5: No arguments at all - require file type
-        console.print("[red]✗ Error: File type required[/red]")
-        console.print(f"[dim]Valid file types: {', '.join(KNOWN_FILE_TYPES)}[/dim]")
-        console.print("\nUsage examples:")
-        console.print("  hca-smart-sync sync source-datasets")
-        console.print("  hca-smart-sync sync integrated-objects")
-        if user_config.get('atlas'):
-            console.print(f"  hca-smart-sync sync {user_config.get('atlas')} source-datasets")
-        raise typer.Exit(1)
+    # Parse arguments to determine atlas and file type
+    atlas, file_type_str, atlas_from_config = _parse_sync_arguments(arg1, arg2, user_config)
     
     # Convert file_type string to enum
     try:
@@ -317,7 +347,8 @@ def sync(
         profile = user_config["profile"]
         console.print(f"[dim]Using profile from config: {profile}[/dim]")
     
-    if atlas and user_config.get('atlas') and atlas == user_config['atlas']:
+    # Show message if atlas actually came from config
+    if atlas_from_config and atlas:
         console.print(f"[dim]Using atlas from config: {atlas}[/dim]")
     
     # Validate atlas is provided

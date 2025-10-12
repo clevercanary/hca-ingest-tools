@@ -17,6 +17,7 @@ from hca_smart_sync.cli import (
     _build_s3_path, 
     _resolve_local_path, 
     _initialize_sync_engine,
+    _parse_sync_arguments,
     _check_aws_cli,
     _display_aws_cli_installation_help,
     error_msg,
@@ -202,6 +203,118 @@ class TestCLI:
         # Check that error message mentions the file types or unrecognized
         error_output = result.stderr if result.stderr else result.stdout
         assert "unrecognized" in error_output.lower() or "source-datasets" in error_output.lower()
+
+    def test_sync_command_file_type_first_with_second_arg(self):
+        """Test sync command fails when file type is first with unexpected second argument."""
+        # File type first, then unexpected second arg - should error, not warn
+        result = self.runner.invoke(app, ["sync", "source-datasets", "something-wrong"])
+        
+        # Should fail with clear error
+        assert result.exit_code == 1
+        error_output = strip_ansi(result.stderr if result.stderr else result.stdout)
+        assert "no second argument is allowed" in error_output.lower()
+        assert "file_type='source-datasets'" in error_output
+        assert "unexpected='something-wrong'" in error_output
+
+
+class TestParseSyncArguments:
+    """Test _parse_sync_arguments helper function."""
+    
+    def test_file_type_only_with_atlas_in_config(self):
+        """Test parsing when only file type is provided and atlas is in config."""
+        user_config = {"atlas": "gut-v1", "profile": "test"}
+        
+        atlas, file_type_str, atlas_from_config = _parse_sync_arguments(
+            "source-datasets", None, user_config
+        )
+        
+        assert atlas == "gut-v1"
+        assert file_type_str == "source-datasets"
+        assert atlas_from_config is True
+    
+    def test_file_type_only_without_atlas_in_config(self):
+        """Test parsing when only file type is provided but no atlas in config."""
+        user_config = {"profile": "test"}
+        
+        atlas, file_type_str, atlas_from_config = _parse_sync_arguments(
+            "integrated-objects", None, user_config
+        )
+        
+        assert atlas is None
+        assert file_type_str == "integrated-objects"
+        assert atlas_from_config is True
+    
+    def test_atlas_and_file_type_provided(self):
+        """Test parsing when both atlas and file type are provided."""
+        user_config = {"atlas": "immune-v1"}
+        
+        atlas, file_type_str, atlas_from_config = _parse_sync_arguments(
+            "gut-v1", "source-datasets", user_config
+        )
+        
+        assert atlas == "gut-v1"
+        assert file_type_str == "source-datasets"
+        assert atlas_from_config is False
+    
+    def test_atlas_and_file_type_provided_matching_config(self):
+        """Test that atlas_from_config is False even when CLI atlas matches config."""
+        user_config = {"atlas": "gut-v1"}
+        
+        atlas, file_type_str, atlas_from_config = _parse_sync_arguments(
+            "gut-v1", "integrated-objects", user_config
+        )
+        
+        assert atlas == "gut-v1"
+        assert file_type_str == "integrated-objects"
+        assert atlas_from_config is False  # User provided it explicitly
+    
+    def test_file_type_first_with_second_arg_raises_error(self):
+        """Test that providing a second arg after file type raises an error."""
+        user_config = {}
+        
+        with pytest.raises(click.exceptions.Exit) as exc_info:
+            _parse_sync_arguments("source-datasets", "something-wrong", user_config)
+        
+        assert exc_info.value.exit_code == 1
+    
+    def test_only_atlas_without_file_type_raises_error(self):
+        """Test that providing only an atlas (not a file type) raises an error."""
+        user_config = {}
+        
+        with pytest.raises(click.exceptions.Exit) as exc_info:
+            _parse_sync_arguments("gut-v1", None, user_config)
+        
+        assert exc_info.value.exit_code == 1
+    
+    def test_two_invalid_args_raises_error(self):
+        """Test that providing two unrecognized args raises an error."""
+        user_config = {}
+        
+        with pytest.raises(click.exceptions.Exit) as exc_info:
+            _parse_sync_arguments("invalid-atlas", "invalid-type", user_config)
+        
+        assert exc_info.value.exit_code == 1
+    
+    def test_no_arguments_raises_error(self):
+        """Test that providing no arguments raises an error."""
+        user_config = {}
+        
+        with pytest.raises(click.exceptions.Exit) as exc_info:
+            _parse_sync_arguments(None, None, user_config)
+        
+        assert exc_info.value.exit_code == 1
+    
+    def test_empty_config(self):
+        """Test parsing with empty config dict."""
+        user_config = {}
+        
+        atlas, file_type_str, atlas_from_config = _parse_sync_arguments(
+            "immune-v1", "integrated-objects", user_config
+        )
+        
+        assert atlas == "immune-v1"
+        assert file_type_str == "integrated-objects"
+        assert atlas_from_config is False
 
 
 class TestHelperFunctions:

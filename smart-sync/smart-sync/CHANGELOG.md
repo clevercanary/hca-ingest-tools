@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.2.3...hca-smart-sync-v0.3.0) (2025-10-12)
+
+
+### Features
+
+* add --version command ([#20](https://github.com/clevercanary/hca-ingest-tools/issues/20)) ([#21](https://github.com/clevercanary/hca-ingest-tools/issues/21)) ([43af8c0](https://github.com/clevercanary/hca-ingest-tools/commit/43af8c09a3ad1505620c09927979c45f1fc57f69))
+* add config store for profile and atlas ([#26](https://github.com/clevercanary/hca-ingest-tools/issues/26)) ([90c919d](https://github.com/clevercanary/hca-ingest-tools/commit/90c919de582db7b2afbd3a6bd057f198699ef3a8))
+
+
+### Code Refactoring
+
+* convert folder to argument from flag ([#22](https://github.com/clevercanary/hca-ingest-tools/issues/22)) ([#24](https://github.com/clevercanary/hca-ingest-tools/issues/24)) ([ab151e0](https://github.com/clevercanary/hca-ingest-tools/commit/ab151e07d9414a56ef24d0cb47df657319618d61))
+
 ## [0.2.3](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.2.2...hca-smart-sync-v0.2.3) (2025-10-07)
 
 

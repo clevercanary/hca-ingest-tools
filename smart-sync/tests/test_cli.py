@@ -196,7 +196,7 @@ class TestCLI:
     def test_sync_command_with_invalid_file_type(self):
         """Test sync command with invalid file_type value."""
         # Atlas first, then invalid file type
-        result = self.runner.invoke(app, ["sync", "gut-v1", "invalid-folder-type", "--dry-run"])
+        result = self.runner.invoke(app, ["sync", "gut-v1", "invalid-file-type", "--dry-run"])
         
         # Should fail due to invalid file_type value
         assert result.exit_code != 0

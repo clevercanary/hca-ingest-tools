@@ -4,7 +4,7 @@ import os
 import subprocess
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, Tuple
 from typing_extensions import Annotated
 from typing import List, Dict
 
@@ -199,7 +199,7 @@ def _parse_sync_arguments(
     arg1: Optional[str], 
     arg2: Optional[str], 
     user_config: Dict[str, Any]
-) -> tuple[Optional[str], Optional[str], bool]:
+) -> Tuple[Optional[str], Optional[str], bool]:
     """Parse sync command arguments to determine atlas and file type.
     
     Supports two usage patterns:

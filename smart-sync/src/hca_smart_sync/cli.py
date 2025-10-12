@@ -4,7 +4,7 @@ import os
 import subprocess
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any, Tuple
 from typing_extensions import Annotated
 from typing import List, Dict
 
@@ -15,7 +15,9 @@ from rich.prompt import Confirm
 
 from hca_smart_sync.config import Config
 from hca_smart_sync.sync_engine import SmartSync
+from hca_smart_sync.config_manager import get_config_path, load_config, save_config
 from hca_smart_sync import __version__
+import yaml
 
 # Create the Typer app instance with proper configuration
 app = typer.Typer(
@@ -193,6 +195,70 @@ def _initialize_sync_engine(config: Config, profile: Optional[str], console: Con
     
     return SmartSync(config, console=console)
 
+def _parse_sync_arguments(
+    arg1: Optional[str], 
+    arg2: Optional[str], 
+    user_config: Dict[str, Any]
+) -> Tuple[Optional[str], Optional[str], bool]:
+    """Parse sync command arguments to determine atlas and file type.
+    
+    Supports two usage patterns:
+    1. "sync <file_type>" - uses atlas from config
+    2. "sync <atlas> <file_type>" - explicit atlas and file type
+    
+    Args:
+        arg1: First positional argument (atlas or file type)
+        arg2: Second positional argument (file type if arg1 is atlas)
+        user_config: User configuration dictionary
+        
+    Returns:
+        Tuple of (atlas, file_type_str, atlas_from_config)
+        
+    Raises:
+        typer.Exit: If arguments are invalid
+    """
+    if arg1 in KNOWN_FILE_TYPES:
+        # Case 1: "sync source-datasets" - file_type provided, get atlas from config
+        if arg2:
+            # User provided two args when file type came first - they're confused about syntax
+            console.print("[red]✗ Error: When file type is specified first, no second argument is allowed[/red]")
+            console.print(f"[dim]You provided: file_type='{arg1}', unexpected='{arg2}'[/dim]")
+            console.print("\nCorrect usage:")
+            console.print(f"  hca-smart-sync sync {arg1}              # Uses atlas from config")
+            console.print(f"  hca-smart-sync sync <atlas> {arg1}      # Specify both atlas and file type")
+            raise typer.Exit(1)
+        return user_config.get('atlas'), arg1, True
+        
+    elif arg2 in KNOWN_FILE_TYPES:
+        # Case 2: "sync gut-v1 source-datasets" - atlas first, file type second
+        return arg1, arg2, False
+        
+    elif arg1 and not arg2:
+        # Case 3: Only one arg provided and it's not a known file type
+        console.print(f"[red]✗ Error: File type required when providing atlas '{arg1}'[/red]")
+        console.print(f"[dim]Valid file types: {', '.join(KNOWN_FILE_TYPES)}[/dim]")
+        console.print("\nUsage examples:")
+        console.print(f"  hca-smart-sync sync {arg1} source-datasets")
+        console.print(f"  hca-smart-sync sync {arg1} integrated-objects")
+        raise typer.Exit(1)
+        
+    elif arg1 and arg2:
+        # Case 4: "sync something something" - neither is a known file type
+        console.print(f"[red]✗ Error: Unrecognized file type. Must be one of: {', '.join(KNOWN_FILE_TYPES)}[/red]")
+        console.print(f"[dim]Got: arg1='{arg1}', arg2='{arg2}'[/dim]")
+        raise typer.Exit(1)
+        
+    else:
+        # Case 5: No arguments at all - require file type
+        console.print("[red]✗ Error: File type required[/red]")
+        console.print(f"[dim]Valid file types: {', '.join(KNOWN_FILE_TYPES)}[/dim]")
+        console.print("\nUsage examples:")
+        console.print("  hca-smart-sync sync source-datasets")
+        console.print("  hca-smart-sync sync integrated-objects")
+        if user_config.get('atlas'):
+            console.print(f"  hca-smart-sync sync {user_config.get('atlas')} source-datasets")
+        raise typer.Exit(1)
+
 def _check_aws_cli() -> bool:
     """Check if AWS CLI is installed and accessible."""
     try:
@@ -234,18 +300,63 @@ class FileType(str, Enum):
     source_datasets = "source-datasets"
     integrated_objects = "integrated-objects"
 
+# Derive valid file types from enum to maintain single source of truth
+KNOWN_FILE_TYPES = {ft.value for ft in FileType}
+
 @app.command()
 def sync(
-    atlas: Annotated[str, typer.Argument(help="Atlas name (e.g., gut-v1, immune-v1)")],
-    file_type: Annotated[FileType, typer.Argument(help="File type: source-datasets or integrated-objects")],
+    arg1: Annotated[Optional[str], typer.Argument(help="Atlas name or file type")] = None,
+    arg2: Annotated[Optional[str], typer.Argument(help="File type (if atlas provided first)")] = None,
     dry_run: Annotated[bool, typer.Option(help="Dry run mode")] = False,
     verbose: Annotated[bool, typer.Option(help="Verbose output")] = False,
-    profile: Annotated[Optional[str], typer.Option(help="AWS profile")] = None,
+    profile: Annotated[Optional[str], typer.Option(help="AWS profile - uses config default if not specified")] = None,
     environment: Annotated[Environment, typer.Option(help="Environment: prod or dev (default: prod)")] = Environment.prod,
     force: Annotated[bool, typer.Option(help="Force upload")] = False,
     local_path: Annotated[Optional[str], typer.Option(help="Local directory to scan (defaults to current directory)")] = None,
 ) -> None:
-    """Sync .h5ad files from local directory to S3."""
+    """Sync .h5ad files from local directory to S3.
+    
+    Usage examples:
+      hca-smart-sync sync gut-v1 source-datasets        # Atlas first, then file type
+      hca-smart-sync sync source-datasets               # File type only (uses config atlas)
+    """
+    
+    # Load user config file for defaults
+    config_path = get_config_path()
+    try:
+        user_config = load_config(config_path)
+    except yaml.YAMLError:
+        console.print("[yellow]Warning: Config file is malformed. Ignoring config file.[/yellow]")
+        user_config = None
+    
+    if user_config is None:
+        user_config = {}
+    
+    # Parse arguments to determine atlas and file type
+    atlas, file_type_str, atlas_from_config = _parse_sync_arguments(arg1, arg2, user_config)
+    
+    # Convert file_type string to enum
+    try:
+        file_type = FileType(file_type_str)
+    except ValueError:
+        console.print(f"[red]✗ Error: Invalid file type '{file_type_str}'[/red]")
+        raise typer.Exit(1)
+    
+    # Use config defaults if not already set
+    if profile is None and "profile" in user_config:
+        profile = user_config["profile"]
+        console.print(f"[dim]Using profile from config: {profile}[/dim]")
+    
+    # Show message if atlas actually came from config
+    if atlas_from_config and atlas:
+        console.print(f"[dim]Using atlas from config: {atlas}[/dim]")
+    
+    # Validate atlas is provided
+    if atlas is None:
+        console.print("[red]✗ Error: Atlas is required.[/red]")
+        console.print("Either provide atlas as an argument or set a default in config:")
+        console.print("  hca-smart-sync config init")
+        raise typer.Exit(1)
     
     # Determine bucket based on environment
     if environment == Environment.prod:
@@ -405,6 +516,96 @@ def _display_results(result: dict, dry_run: bool) -> None:
     # Display status message (always green for success states)
     console.print(format_status(msg["status"]))
     console.print()  # Add spacing after results
+
+
+# Create config command group
+config_app = typer.Typer(help="Manage configuration settings")
+app.add_typer(config_app, name="config")
+
+
+@config_app.command("show")
+def config_show() -> None:
+    """Display current configuration settings."""
+    config_path = get_config_path()
+    
+    try:
+        config_data = load_config(config_path)
+    except yaml.YAMLError:
+        console.print(f"[red]✗ Error:[/red] Config file at {config_path} is malformed.")
+        console.print("[yellow]Please check the YAML syntax or delete the file to start fresh.[/yellow]")
+        raise typer.Exit(1)
+    
+    if config_data is None:
+        console.print(f"[yellow]No configuration file found at {config_path}[/yellow]")
+        console.print("Run 'hca-smart-sync config init' to create one.")
+        return
+    
+    # Display config
+    console.print(f"\n[bold]Configuration:[/bold] {config_path}")
+    console.print("─" * 50)
+    
+    if "profile" in config_data:
+        console.print(f"profile: {config_data['profile']}")
+    else:
+        console.print("profile: [dim](not set)[/dim]")
+    
+    if "atlas" in config_data:
+        console.print(f"atlas: {config_data['atlas']}")
+    else:
+        console.print("atlas: [dim](not set)[/dim]")
+    
+    console.print()
+
+
+@config_app.command("init")
+def config_init() -> None:
+    """Initialize or update configuration settings interactively."""
+    config_path = get_config_path()
+    
+    # Load existing config if it exists
+    try:
+        existing_config = load_config(config_path)
+    except yaml.YAMLError:
+        console.print("[yellow]Warning: Existing config file is malformed. Creating new configuration.[/yellow]")
+        existing_config = None
+    
+    if existing_config is None:
+        existing_config = {}
+    
+    console.print("\n[bold]HCA Smart-Sync Configuration[/bold]")
+    console.print("─" * 50)
+    
+    # Prompt for AWS Profile
+    current_profile = existing_config.get("profile", "")
+    if current_profile:
+        profile_prompt = f"AWS Profile [current: {current_profile}]"
+    else:
+        profile_prompt = "AWS Profile"
+    
+    profile = typer.prompt(profile_prompt, default=current_profile, show_default=False)
+    
+    # Prompt for Default Atlas
+    current_atlas = existing_config.get("atlas", "")
+    if current_atlas:
+        atlas_prompt = f"Default Atlas [current: {current_atlas}]"
+    else:
+        atlas_prompt = "Default Atlas"
+    
+    atlas = typer.prompt(atlas_prompt, default=current_atlas, show_default=False)
+    
+    # Build config data (only include non-empty values)
+    config_data = {}
+    if profile:
+        config_data["profile"] = profile
+    if atlas:
+        config_data["atlas"] = atlas
+    
+    # Save configuration
+    save_config(config_path, config_data)
+    
+    console.print()
+    console.print(f"[green]✓ Configuration saved to {config_path}[/green]")
+    console.print()
 
 
 def main() -> None:

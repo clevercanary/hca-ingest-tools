@@ -217,9 +217,6 @@ def _parse_sync_arguments(
     Raises:
         typer.Exit: If arguments are invalid
     """
-    # Derive valid file types from enum to maintain single source of truth
-    KNOWN_FILE_TYPES = {ft.value for ft in FileType}
-    
     if arg1 in KNOWN_FILE_TYPES:
         # Case 1: "sync source-datasets" - file_type provided, get atlas from config
         if arg2:
@@ -302,6 +299,9 @@ class Environment(str, Enum):
 class FileType(str, Enum):
     source_datasets = "source-datasets"
     integrated_objects = "integrated-objects"
+
+# Derive valid file types from enum to maintain single source of truth
+KNOWN_FILE_TYPES = {ft.value for ft in FileType}
 
 @app.command()
 def sync(

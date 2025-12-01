@@ -23,7 +23,8 @@ from hca_smart_sync.cli import (
     error_msg,
     success_msg,
     format_file_count,
-    format_status
+    format_status,
+    ATLAS_BIONETWORKS
 )
 
 
@@ -380,10 +381,44 @@ class TestHelperFunctions:
     
     def test_build_s3_path_different_atlas(self):
         """Test S3 path building with different atlas."""
-        result = _build_s3_path("my-bucket", "immune-v2", "integrated-objects")
-        expected = "s3://my-bucket/immune/immune-v2/integrated-objects/"
+        result = _build_s3_path("my-bucket", "retina-v2", "integrated-objects")
+        expected = "s3://my-bucket/eye/retina-v2/integrated-objects/"
         
         assert result == expected
+    
+    def test_build_s3_path_with_unknown_atlas(self):
+        """Test S3 path building with unknown atlas."""
+        atlas = "gut-v123"
+
+        with pytest.raises(click.exceptions.Exit):
+            _build_s3_path("test-bucket", atlas, "source-datasets")
+    
+    def test_build_s3_path_atlases(self):
+        """Test that all atlases in the bionetwork mapping produce a path with a valid bionetwork."""
+        valid_bionetworks = {
+            "adipose",
+            "breast",
+            "development",
+            "eye",
+            "genetic-diversity",
+            "gut",
+            "heart",
+            "immune",
+            "kidney",
+            "liver",
+            "lung",
+            "musculoskeletal",
+            "nervous-system",
+            "oral-and-craniofacial",
+            "organoid",
+            "pancreas",
+            "reproduction",
+            "skin",
+        }
+
+        for atlas in ATLAS_BIONETWORKS:
+            result = _build_s3_path("test-bucket", atlas, "source-datasets")
+            assert result.split("/")[3] in valid_bionetworks
     
     def test_resolve_local_path_with_path(self):
         """Test local path resolution with provided path."""
@@ -806,12 +841,12 @@ class TestConfigInit:
         
         # Create existing config
         from hca_smart_sync.config_manager import save_config
-        save_config(config_file, {"profile": "old-profile", "atlas": "old-atlas"})
+        save_config(config_file, {"profile": "old-profile", "atlas": "lung-v2"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
             runner = CliRunner()
             # Update both values
-            result = runner.invoke(app, ["config", "init"], input="new-profile\nnew-atlas\n")
+            result = runner.invoke(app, ["config", "init"], input="new-profile\nbrain-v1\n")
             
             assert result.exit_code == 0
             assert "Configuration saved" in result.output
@@ -820,7 +855,7 @@ class TestConfigInit:
             from hca_smart_sync.config_manager import load_config
             config_data = load_config(config_file)
             assert config_data["profile"] == "new-profile"
-            assert config_data["atlas"] == "new-atlas"
+            assert config_data["atlas"] == "brain-v1"
 
     def test_config_init_keep_existing_values(self, tmp_path):
         """Test config init keeps values when Enter is pressed."""
@@ -828,7 +863,7 @@ class TestConfigInit:
         
         # Create existing config
         from hca_smart_sync.config_manager import save_config
-        save_config(config_file, {"profile": "keep-profile", "atlas": "keep-atlas"})
+        save_config(config_file, {"profile": "keep-profile", "atlas": "retina-v1"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
             runner = CliRunner()
@@ -841,7 +876,7 @@ class TestConfigInit:
             from hca_smart_sync.config_manager import load_config
             config_data = load_config(config_file)
             assert config_data["profile"] == "keep-profile"
-            assert config_data["atlas"] == "keep-atlas"
+            assert config_data["atlas"] == "retina-v1"
 
     def test_config_init_partial_update(self, tmp_path):
         """Test config init updates only one value."""
@@ -849,7 +884,7 @@ class TestConfigInit:
         
         # Create existing config
         from hca_smart_sync.config_manager import save_config
-        save_config(config_file, {"profile": "old-profile", "atlas": "old-atlas"})
+        save_config(config_file, {"profile": "old-profile", "atlas": "immune-v1"})
         
         with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
             runner = CliRunner()
@@ -862,7 +897,7 @@ class TestConfigInit:
             from hca_smart_sync.config_manager import load_config
             config_data = load_config(config_file)
             assert config_data["profile"] == "new-profile"
-            assert config_data["atlas"] == "old-atlas"
+            assert config_data["atlas"] == "immune-v1"
 
     def test_config_init_with_only_profile(self, tmp_path):
         """Test config init with only profile (no atlas)."""
@@ -899,6 +934,21 @@ class TestConfigInit:
             assert not config_data.get("profile")
             assert config_data.get("atlas") == "gut-v1"
 
+    def test_config_init_with_invalid_atlas(self, tmp_path):
+        """Test config init errors on invalid atlas."""
+        config_file = tmp_path / "config.yaml"
+        
+        with patch('hca_smart_sync.cli.get_config_path', return_value=config_file):
+            runner = CliRunner()
+            # Provide interactive input: profile and atlas
+            result = runner.invoke(app, ["config", "init"], input="my-profile\ngut-v123\n")
+            
+            # Should fail
+            assert result.exit_code == 1
+            assert "Unknown atlas" in result.output
+            
+            # Verify file was not created
+            assert not config_file.exists()
 
 class TestSyncWithConfigDefaults:
     """Tests for sync command using config file defaults."""

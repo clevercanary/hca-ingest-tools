@@ -409,7 +409,6 @@ class TestHelperFunctions:
             "lung",
             "musculoskeletal",
             "nervous-system",
-            "oral",
             "oral-and-craniofacial",
             "organoid",
             "pancreas",

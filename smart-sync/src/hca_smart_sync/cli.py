@@ -628,6 +628,10 @@ def config_init() -> None:
         atlas_prompt = "Default Atlas"
     
     atlas = typer.prompt(atlas_prompt, default=current_atlas, show_default=False)
+
+    if not (atlas == "" or atlas in ATLAS_BIONETWORKS):
+        console.print(error_msg(Messages.UNKNOWN_ATLAS.format(atlas=atlas)))
+        raise typer.Exit(1)
     
     # Build config data (only include non-empty values)
     config_data = {}

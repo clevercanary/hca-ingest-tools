@@ -23,7 +23,8 @@ from hca_smart_sync.cli import (
     error_msg,
     success_msg,
     format_file_count,
-    format_status
+    format_status,
+    ATLAS_BIONETWORKS
 )
 
 
@@ -380,10 +381,45 @@ class TestHelperFunctions:
     
     def test_build_s3_path_different_atlas(self):
         """Test S3 path building with different atlas."""
-        result = _build_s3_path("my-bucket", "immune-v2", "integrated-objects")
-        expected = "s3://my-bucket/immune/immune-v2/integrated-objects/"
+        result = _build_s3_path("my-bucket", "retina-v2", "integrated-objects")
+        expected = "s3://my-bucket/eye/retina-v2/integrated-objects/"
         
         assert result == expected
+    
+    def test_build_s3_path_with_unknown_atlas(self):
+        """Test S3 path building with unknown atlas."""
+        atlas = "gut-v123"
+
+        with pytest.raises(click.exceptions.Exit):
+            _build_s3_path("test-bucket", atlas, "source-datasets")
+    
+    def test_build_s3_path_atlases(self):
+        """Test that all atlases in the bionetwork mapping produce a path with a valid bionetwork."""
+        valid_bionetworks = {
+            "adipose",
+            "breast",
+            "development",
+            "eye",
+            "genetic-diversity",
+            "gut",
+            "heart",
+            "immune",
+            "kidney",
+            "liver",
+            "lung",
+            "musculoskeletal",
+            "nervous-system",
+            "oral",
+            "oral-and-craniofacial",
+            "organoid",
+            "pancreas",
+            "reproduction",
+            "skin",
+        }
+
+        for atlas in ATLAS_BIONETWORKS:
+            result = _build_s3_path("test-bucket", atlas, "source-datasets")
+            assert result.split("/")[3] in valid_bionetworks
     
     def test_resolve_local_path_with_path(self):
         """Test local path resolution with provided path."""

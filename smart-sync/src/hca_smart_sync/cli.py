@@ -53,6 +53,7 @@ class Messages:
     CONFIG_SHOW_ERROR = "Failed to load configuration: {error}"
     SYNC_ERROR = "Sync failed: {error}"
     BUCKET_NOT_CONFIGURED = "Error: S3 bucket not configured. Provide bucket argument or set in config"
+    UNKNOWN_ATLAS = "Unknown atlas: {atlas}"
     
     # Success messages
     CONFIG_INITIALIZING = "Initializing HCA Smart Sync Configuration"
@@ -62,6 +63,38 @@ class Messages:
     DRY_RUN_COMPLETED = "Dry run completed"
     SYNC_CANCELLED = "Sync canceled by user"
     SYNC_COMPLETED = "Sync completed successfully"
+
+# Bionetwork lookup table
+ATLAS_BIONETWORKS = {
+    "brain-v1": "nervous-system",
+    "cortex-v1": "nervous-system",
+    "lung-v1": "lung",
+    "lung-v2": "lung",
+    "retina-v1": "eye",
+    "retina-v2": "eye",
+    "ocular-outflow-segment-v1": "eye",
+    "ocular-surface-v1": "eye",
+    "optic-nerve-head-v1": "eye",
+    "optic-nerve-v1": "eye",
+    "rpe-choroid-v1": "eye",
+    "organoid-neural-v1": "organoid",
+    "organoid-endoderm-v1": "organoid",
+    "adipose-v1": "adipose",
+    "breast-v1": "breast",
+    "development-v1": "development",
+    "gdn-v1": "genetic-diversity",
+    "gut-v1": "gut",
+    "gut-v2": "gut",
+    "heart-v1": "heart",
+    "immune-v1": "immune",
+    "kidney-v1": "kidney",
+    "liver-v1": "liver",
+    "msk-v1": "musculoskeletal",
+    "orcf-v1": "oral-and-craniofacial",
+    "pancreas-v1": "pancreas",
+    "reproduction-v1": "reproduction",
+    "skin-v1": "skin",
+}
 
 # Result message lookup table
 RESULT_MESSAGES = {
@@ -177,7 +210,10 @@ def _validate_configuration(config: Config) -> None:
 
 def _build_s3_path(bucket_name: str, atlas: str, folder: str) -> str:
     """Build S3 path from components."""
-    bionetwork = atlas.split('-')[0]
+    bionetwork = ATLAS_BIONETWORKS.get(atlas)
+    if bionetwork is None:
+        console.print(error_msg(Messages.UNKNOWN_ATLAS.format(atlas=atlas)))
+        raise typer.Exit(1)
     return f"s3://{bucket_name}/{bionetwork}/{atlas}/{folder}/"
 
 def _resolve_local_path(local_path: Optional[str]) -> Path:

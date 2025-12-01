@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.3.0...hca-smart-sync-v0.4.0) (2025-12-01)
+
+
+### Features
+
+* limit to known atlas names and derive bionetwork from mapping ([#27](https://github.com/clevercanary/hca-ingest-tools/issues/27)) ([#28](https://github.com/clevercanary/hca-ingest-tools/issues/28)) ([89d7b4a](https://github.com/clevercanary/hca-ingest-tools/commit/89d7b4a3ff873ff9def2cd803f9f02f525eb0593))
+
 ## [0.3.0](https://github.com/clevercanary/hca-ingest-tools/compare/hca-smart-sync-v0.2.3...hca-smart-sync-v0.3.0) (2025-10-12)
 
 
